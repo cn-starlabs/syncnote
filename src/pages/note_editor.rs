@@ -5,6 +5,7 @@ use leptos_router::hooks::use_params_map;
 
 use crate::client_upload::upload_from_change_event;
 use crate::components::markdown::MarkdownPreview;
+use crate::components::notes_sidebar::NotesSidebar;
 use crate::models::Note;
 use crate::server::note_fns::{get_note, SaveNote};
 
@@ -13,16 +14,50 @@ pub fn NoteEditorPage() -> impl IntoView {
     let params = use_params_map();
     let id = move || params.read().get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
     let note = Resource::new(id, |id| async move { get_note(id).await });
+    let mobile_sidebar_open = RwSignal::new(false);
 
     view! {
-        <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
-            {move || Suspend::new(async move {
-                match note.await {
-                    Ok(n) => view! { <NoteEditor note=n/> }.into_any(),
-                    Err(_) => view! { <p class="text-sm text-rose-500">"Note not found."</p> }.into_any(),
-                }
-            })}
-        </Suspense>
+        <div class="flex flex-col md:flex-row gap-6 items-start">
+            // Mobile sidebar toggle button
+            <div class="w-full flex items-center justify-between md:hidden pb-2 border-b border-slate-200 dark:border-slate-800">
+                <button
+                    on:click=move |_| mobile_sidebar_open.update(|open| *open = !*open)
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    {move || if mobile_sidebar_open.get() { "Hide notes list" } else { "Show notes list" }}
+                </button>
+            </div>
+
+            // Mobile expandable sidebar
+            <Show when=move || mobile_sidebar_open.get()>
+                <div class="w-full md:hidden">
+                    <NotesSidebar
+                        current_note_id=Signal::derive(move || Some(id()))
+                        on_note_selected=Callback::new(move |_| mobile_sidebar_open.set(false))
+                    />
+                </div>
+            </Show>
+
+            // Desktop sticky sidebar
+            <div class="hidden md:block w-72 shrink-0 sticky top-6">
+                <NotesSidebar current_note_id=Signal::derive(move || Some(id()))/>
+            </div>
+
+            // Main note editor area
+            <div class="flex-1 min-w-0 w-full">
+                <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
+                    {move || Suspend::new(async move {
+                        match note.await {
+                            Ok(n) => view! { <NoteEditor note=n/> }.into_any(),
+                            Err(_) => view! { <p class="text-sm text-rose-500">"Note not found."</p> }.into_any(),
+                        }
+                    })}
+                </Suspense>
+            </div>
+        </div>
     }
 }
 
@@ -100,18 +135,18 @@ fn NoteEditor(note: Note) -> impl IntoView {
                 </Show>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <textarea
                     prop:value=move || body.get()
                     on:input=move |ev| {
                         body.set(event_target_value(&ev));
                         schedule_save();
                     }
-                    rows="20"
+                    rows="26"
                     placeholder="Write Markdown…"
-                    class="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-900 p-3 font-mono text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                    class="w-full min-h-[550px] rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-900 p-4 font-mono text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                 ></textarea>
-                <div class="rounded-md border border-slate-200 dark:border-slate-800 p-3 overflow-auto">
+                <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 p-4 overflow-auto min-h-[550px]">
                     <MarkdownPreview body=Signal::derive(move || body.get())/>
                 </div>
             </div>

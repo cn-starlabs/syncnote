@@ -41,7 +41,7 @@ pub fn Nav() -> impl IntoView {
 
     view! {
         <header class="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                 <A href="/" attr:class="text-lg font-bold tracking-tight text-brand-600 dark:text-brand-100">"SyncNote"</A>
                 <nav class="flex items-center gap-1 sm:gap-2 text-sm">
                     <Suspense fallback=|| ()>

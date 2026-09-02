@@ -4,3 +4,4 @@ pub mod footer;
 pub mod layout;
 pub mod markdown;
 pub mod nav;
+pub mod notes_sidebar;
