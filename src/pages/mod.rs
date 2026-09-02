@@ -1,0 +1,12 @@
+pub mod account;
+pub mod admin_invites;
+pub mod admin_users;
+pub mod dashboard;
+pub mod home;
+pub mod join_invite;
+pub mod login;
+pub mod not_found;
+pub mod note_editor;
+pub mod register;
+pub mod shared_page_editor;
+pub mod shared_pages_list;

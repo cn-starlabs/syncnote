@@ -1,0 +1,21 @@
+# Local dev defaults. Edit all of these before deploying publicly —
+# see the [webauthn] note below in particular.
+
+[server]
+ip = "0.0.0.0"
+port = 9099
+site_root = "target/site"
+
+[database]
+path = "app.db"
+uploads_dir = "uploads"
+
+[webauthn]
+# Passkeys require rp_id to be the exact effective domain the browser sees.
+# In production this must be your real domain, served over https, e.g.:
+#   rp_id = "notes.example.com"
+#   rp_origin = "https://notes.example.com"
+# Locally, browse via http://localhost:3000 (not 127.0.0.1) for these
+# defaults to work.
+rp_id = "localhost"
+rp_origin = "http://localhost:9099"

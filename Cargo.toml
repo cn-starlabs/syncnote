@@ -1,0 +1,139 @@
+[package]
+name = "syncnote"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos = { version = "0.8.19" }
+leptos_router = { version = "0.8" }
+leptos_meta = { version = "0.8" }
+leptos_axum = { version = "0.8", optional = true }
+
+# Server-only deps
+axum = { version = "0.8", features = ["ws", "multipart"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs"], optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"], optional = true }
+tower-sessions = { version = "0.14", optional = true }
+tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite"], optional = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "macros", "chrono"], optional = true }
+argon2 = { version = "0.5.3", optional = true }
+rand = { version = "0.8", optional = true }
+dotenvy = { version = "0.15", optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+futures-util = { version = "0.3", optional = true }
+url = { version = "2", optional = true }
+toml = { version = "0.8", optional = true }
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"], optional = true }
+
+# Shared (server + client) deps
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+http = "1"
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+
+# Hydration / wasm deps
+console_error_panic_hook = { version = "0.1", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+webauthn-rs-proto = { version = "0.5", features = ["wasm"], optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "WebSocket",
+    "MessageEvent",
+    "BinaryType",
+    "CloseEvent",
+    "ErrorEvent",
+    "Window",
+    "Location",
+    "File",
+    "FileList",
+    "FormData",
+    "HtmlInputElement",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Headers",
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "CredentialsContainer",
+    "Navigator",
+    "PublicKeyCredential",
+    "PublicKeyCredentialCreationOptions",
+    "DomException",
+] }
+js-sys = { version = "0.3", optional = true }
+
+[features]
+hydrate = [
+    "leptos/hydrate",
+    "dep:console_error_panic_hook",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:serde-wasm-bindgen",
+    "dep:web-sys",
+    "dep:js-sys",
+    "dep:webauthn-rs-proto",
+]
+ssr = [
+    "dep:axum",
+    "dep:tokio",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:tower-sessions",
+    "dep:tower-sessions-sqlx-store",
+    "dep:leptos_axum",
+    "dep:sqlx",
+    "dep:argon2",
+    "dep:rand",
+    "dep:dotenvy",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+    "dep:futures-util",
+    "dep:url",
+    "dep:toml",
+    "dep:webauthn-rs",
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = 3
+strip = true
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = true
+
+[package.metadata.leptos]
+output-name = "syncnote"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+tailwind-input-file = "style/tailwind.css"
+assets-dir = "public"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+browserquery = "defaults"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-release = "wasm-release"

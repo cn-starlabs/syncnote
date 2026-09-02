@@ -1,0 +1,21 @@
+/target
+/pkg
+/dist
+node_modules
+
+# Local database & state
+/app.db
+/app.db-shm
+/app.db-wal
+*.db-journal
+/uploads
+
+# Local env
+.env.local
+.env.production
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@source "../src/**/*.rs";
+
+/* Class-based dark mode: apply when <html class="dark"> */
+@variant dark (.dark &);
+
+@theme {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+
+    --color-brand-50:  oklch(0.97 0.02 265);
+    --color-brand-100: oklch(0.93 0.05 265);
+    --color-brand-500: oklch(0.59 0.20 265);
+    --color-brand-600: oklch(0.52 0.22 265);
+    --color-brand-700: oklch(0.45 0.22 265);
+}
+
+html, body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Rendered Markdown preview inside note/page editors */
+@layer components {
+    .prose-note h1 { @apply text-2xl font-bold mt-4 mb-2; }
+    .prose-note h2 { @apply text-xl font-bold mt-4 mb-2; }
+    .prose-note h3 { @apply text-lg font-semibold mt-3 mb-1; }
+    .prose-note p  { @apply my-2 leading-relaxed; }
+    .prose-note ul { @apply list-disc pl-6 my-2; }
+    .prose-note ol { @apply list-decimal pl-6 my-2; }
+    .prose-note li { @apply my-1; }
+    .prose-note a  { @apply text-brand-600 dark:text-brand-100 underline; }
+    .prose-note code { @apply bg-slate-100 dark:bg-slate-800 rounded px-1 py-0.5 text-sm font-mono; }
+    .prose-note pre { @apply bg-slate-100 dark:bg-slate-800 rounded p-3 overflow-x-auto my-2; }
+    .prose-note pre code { @apply bg-transparent p-0; }
+    .prose-note blockquote { @apply border-l-4 border-slate-300 dark:border-slate-700 pl-3 italic text-slate-600 dark:text-slate-400 my-2; }
+}
