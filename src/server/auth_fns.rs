@@ -165,6 +165,26 @@ pub async fn register(email: String, password: String, invite_code: String) -> R
 
     tx.commit().await.map_err(|e| srv("db", e))?;
 
+    // Send welcome email asynchronously in the background
+    let recipient = email.clone();
+    tokio::spawn(async move {
+        let subject = "Welcome to SyncNote!";
+        let text = format!(
+            "Welcome to SyncNote!\n\nYour account ({recipient}) has been successfully created.\nYou can now sign in and create notes or collaborate on live shared pages."
+        );
+        let html = format!(
+            "<div style=\"font-family: sans-serif; line-height: 1.6; color: #334155; max-width: 560px;\">\
+                <h2 style=\"color: #0f172a;\">Welcome to SyncNote!</h2>\
+                <p>Hello,</p>\
+                <p>Your account (<strong>{recipient}</strong>) has been successfully created.</p>\
+                <p>You can now start creating personal markdown notes, attaching files, and collaborating on live shared pages.</p>\
+                <hr style=\"border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;\"/>\
+                <p style=\"font-size: 12px; color: #94a3b8;\">SyncNote Team</p>\
+            </div>"
+        );
+        let _ = crate::server::mailer::send_email(&recipient, subject, &text, Some(&html)).await;
+    });
+
     sess::login(&session, user_id.0).await?;
     leptos_axum::redirect("/app");
     Ok(AuthOutcome { ok: true, message: None })
@@ -261,6 +281,90 @@ pub async fn change_password(current_password: String, new_password: String) -> 
 
     Ok(AuthOutcome { ok: true, message: None })
 }
+
+#[server(endpoint = "auth/forgot-password")]
+pub async fn request_password_reset(email: String) -> Result<AuthOutcome, ServerFnError> {
+    use crate::auth::password as pw;
+    use crate::server_ctx::AppPool;
+    use axum::extract::Extension;
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
+
+    let email = email.trim().to_lowercase();
+    if !is_email(&email) {
+        return Ok(AuthOutcome {
+            ok: false,
+            message: Some("Please enter a valid email address".into()),
+        });
+    }
+
+    let Extension(AppPool(pool)) = leptos_axum::extract::<Extension<AppPool>>().await?;
+
+    let row: Option<(i64, bool)> = sqlx::query_as("SELECT id, locked FROM users WHERE email = ?")
+        .bind(&email)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+
+    let Some((user_id, locked)) = row else {
+        // Return ok: true so attackers cannot enumerate valid user emails
+        return Ok(AuthOutcome {
+            ok: true,
+            message: Some("If that email is registered, a temporary password has been sent.".into()),
+        });
+    };
+
+    if locked {
+        return Ok(AuthOutcome {
+            ok: false,
+            message: Some("This account is locked. Please contact an administrator.".into()),
+        });
+    }
+
+    let temp_password: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(12)
+        .map(char::from)
+        .collect();
+
+    let hash = pw::hash(&temp_password).map_err(|e| srv("hash", e))?;
+    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(hash)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+
+    let recipient = email.clone();
+    tokio::spawn(async move {
+        let subject = "SyncNote: Temporary Password Reset";
+        let text = format!(
+            "Hello,\n\nA temporary password has been requested for your SyncNote account ({recipient}):\n\n\
+             Temporary Password: {temp_password}\n\n\
+             Please sign in with this temporary password and change your password immediately in your Account settings."
+        );
+        let html = format!(
+            "<div style=\"font-family: sans-serif; line-height: 1.6; color: #334155; max-width: 560px;\">\
+                <h2 style=\"color: #0f172a;\">Password Reset</h2>\
+                <p>Hello,</p>\
+                <p>A temporary password was generated for your SyncNote account (<strong>{recipient}</strong>):</p>\
+                <div style=\"background: #f1f5f9; padding: 12px 16px; border-radius: 6px; font-family: monospace; font-size: 16px; font-weight: bold; margin: 16px 0; letter-spacing: 1px;\">\
+                    {temp_password}\
+                </div>\
+                <p>Please log in using this temporary password and update it under <strong>Account settings</strong>.</p>\
+                <hr style=\"border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;\"/>\
+                <p style=\"font-size: 12px; color: #94a3b8;\">If you did not request this, please contact support.</p>\
+            </div>"
+        );
+        let _ = crate::server::mailer::send_email(&recipient, subject, &text, Some(&html)).await;
+    });
+
+    Ok(AuthOutcome {
+        ok: true,
+        message: Some("A temporary password has been sent to your email address.".into()),
+    })
+}
+
 
 #[cfg(feature = "ssr")]
 fn is_email(s: &str) -> bool {

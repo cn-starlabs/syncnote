@@ -9,4 +9,6 @@ pub mod shared_page_fns;
 #[cfg(feature = "ssr")]
 pub mod attachments;
 #[cfg(feature = "ssr")]
+pub mod mailer;
+#[cfg(feature = "ssr")]
 pub mod ws;
