@@ -20,3 +20,5 @@ node_modules
 .vscode/
 *.swp
 .env
+.env*
+.env.*
