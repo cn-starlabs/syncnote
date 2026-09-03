@@ -9,12 +9,20 @@ use crate::server::note_fns::{list_my_notes, CreateNote};
 pub fn NotesSidebar(
     #[prop(into, optional)] current_note_id: Signal<Option<i64>>,
     #[prop(optional)] on_note_selected: Option<Callback<()>>,
+    #[prop(into, optional)] refresh_trigger: Option<Signal<u64>>,
 ) -> impl IntoView {
     let notes = Resource::new(|| (), |_| async move { list_my_notes().await });
     let search_query = RwSignal::new(String::new());
     let display_limit = RwSignal::new(30usize);
     let create = ServerAction::<CreateNote>::new();
     let navigate = use_navigate();
+
+    if let Some(trigger) = refresh_trigger {
+        Effect::new(move |_| {
+            let _ = trigger.get();
+            notes.refetch();
+        });
+    }
 
     Effect::new(move |_| {
         if let Some(Ok(id)) = create.value().get() {

@@ -15,6 +15,7 @@ pub fn NoteEditorPage() -> impl IntoView {
     let id = move || params.read().get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
     let note = Resource::new(id, |id| async move { get_note(id).await });
     let mobile_sidebar_open = RwSignal::new(false);
+    let sidebar_refresh_tick = RwSignal::new(0u64);
 
     view! {
         <div class="flex flex-col md:flex-row gap-6 items-start">
@@ -37,13 +38,17 @@ pub fn NoteEditorPage() -> impl IntoView {
                     <NotesSidebar
                         current_note_id=Signal::derive(move || Some(id()))
                         on_note_selected=Callback::new(move |_| mobile_sidebar_open.set(false))
+                        refresh_trigger=Signal::derive(move || sidebar_refresh_tick.get())
                     />
                 </div>
             </Show>
 
             // Desktop sticky sidebar
             <div class="hidden md:block w-72 shrink-0 sticky top-6">
-                <NotesSidebar current_note_id=Signal::derive(move || Some(id()))/>
+                <NotesSidebar
+                    current_note_id=Signal::derive(move || Some(id()))
+                    refresh_trigger=Signal::derive(move || sidebar_refresh_tick.get())
+                />
             </div>
 
             // Main note editor area
@@ -51,7 +56,7 @@ pub fn NoteEditorPage() -> impl IntoView {
                 <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
                     {move || Suspend::new(async move {
                         match note.await {
-                            Ok(n) => view! { <NoteEditor note=n/> }.into_any(),
+                            Ok(n) => view! { <NoteEditor note=n on_saved=Callback::new(move |_| sidebar_refresh_tick.update(|t| *t = t.wrapping_add(1)))/> }.into_any(),
                             Err(_) => view! { <p class="text-sm text-rose-500">"Note not found."</p> }.into_any(),
                         }
                     })}
@@ -62,7 +67,7 @@ pub fn NoteEditorPage() -> impl IntoView {
 }
 
 #[component]
-fn NoteEditor(note: Note) -> impl IntoView {
+fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> impl IntoView {
     let id = note.id;
     let title = RwSignal::new(note.title);
     let body = RwSignal::new(note.body);
@@ -75,6 +80,16 @@ fn NoteEditor(note: Note) -> impl IntoView {
     let email_modal_open = RwSignal::new(false);
     let recipient_email = RwSignal::new(String::new());
     let email_feedback = RwSignal::new(Option::<(bool, String)>::None);
+
+    Effect::new(move |_| {
+        if let Some(res) = save.value().get() {
+            if res.is_ok() {
+                if let Some(cb) = on_saved {
+                    cb.run(());
+                }
+            }
+        }
+    });
 
     Effect::new(move |_| {
         if let Some(res) = send_mail_action.value().get() {
@@ -119,9 +134,12 @@ fn NoteEditor(note: Note) -> impl IntoView {
                         title.set(event_target_value(&ev));
                         schedule_save();
                     }
-                    class="flex-1 text-xl font-semibold bg-transparent border-0 border-b border-transparent focus:border-brand-500 focus:ring-0 px-0 text-slate-900 dark:text-slate-100"
+                    placeholder="Note subject / title…"
+                    class="flex-1 text-xl font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 rounded-lg px-3.5 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                 />
-                <span class="text-xs text-slate-400">{move || if saved.get() { "Saved" } else { "Saving…" }}</span>
+                <span class="text-xs font-medium text-slate-400 dark:text-slate-500 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
+                    {move || if saved.get() { "Saved" } else { "Saving…" }}
+                </span>
             </div>
 
             <div class="flex items-center justify-between gap-3">
@@ -234,10 +252,10 @@ fn NoteEditor(note: Note) -> impl IntoView {
                         schedule_save();
                     }
                     rows="26"
-                    placeholder="Write Markdown…"
-                    class="w-full min-h-[550px] rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-900 p-4 font-mono text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                    placeholder="Write Markdown (supports $math$ and $$block math$$)…"
+                    class="w-full min-h-[550px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 font-mono text-sm leading-relaxed text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-400 dark:hover:border-slate-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                 ></textarea>
-                <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 p-4 overflow-auto min-h-[550px]">
+                <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[550px]">
                     <MarkdownPreview body=Signal::derive(move || body.get())/>
                 </div>
             </div>

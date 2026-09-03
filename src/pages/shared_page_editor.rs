@@ -155,18 +155,18 @@ fn SharedPageEditor(page: SharedPage) -> impl IntoView {
                             prop:value=move || body.get()
                             on:input=on_body_input
                             rows="20"
-                            placeholder="Write Markdown — edits sync live to everyone viewing this page…"
-                            class="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-900 p-3 font-mono text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                            placeholder="Write Markdown (supports $math$ and $$block math$$) — edits sync live to everyone viewing this page…"
+                            class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 font-mono text-sm leading-relaxed text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-400 dark:hover:border-slate-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                         ></textarea>
                     }.into_any()
                 } else {
                     view! {
-                        <div class="rounded-md border border-slate-200 dark:border-slate-800 p-3 text-sm text-slate-500">
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-sm text-slate-500 shadow-sm">
                             "You have view-only access to this page."
                         </div>
                     }.into_any()
                 }}
-                <div class="rounded-md border border-slate-200 dark:border-slate-800 p-3 overflow-auto">
+                <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[400px]">
                     <MarkdownPreview body=Signal::derive(move || body.get())/>
                 </div>
             </div>

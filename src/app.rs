@@ -28,6 +28,34 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="description" content="SyncNote — personal notes and live-collaborative shared pages"/>
                 <script>"(function(){try{if(localStorage.getItem('dark-mode')==='true'){document.documentElement.classList.add('dark');}}catch(e){}})();"</script>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous"/>
+                <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+                <script>
+                    "window.renderMathInSyncNote = function() {\
+                        if (typeof katex === 'undefined') return;\
+                        document.querySelectorAll('.katex-math-inline:not([data-rendered])').forEach(function(el) {\
+                            var expr = el.getAttribute('data-expr');\
+                            if (expr) {\
+                                try {\
+                                    katex.render(expr, el, { throwOnError: false, displayMode: false });\
+                                    el.setAttribute('data-rendered', 'true');\
+                                } catch(e) { console.error(e); }\
+                            }\
+                        });\
+                        document.querySelectorAll('.katex-math-block:not([data-rendered])').forEach(function(el) {\
+                            var expr = el.getAttribute('data-expr');\
+                            if (expr) {\
+                                try {\
+                                    katex.render(expr, el, { throwOnError: false, displayMode: true });\
+                                    el.setAttribute('data-rendered', 'true');\
+                                } catch(e) { console.error(e); }\
+                            }\
+                        });\
+                    };\
+                    document.addEventListener('DOMContentLoaded', function() {\
+                        if (window.renderMathInSyncNote) window.renderMathInSyncNote();\
+                    });"
+                </script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options=options.clone()/>
                 <HashedStylesheet id="leptos" options=options />

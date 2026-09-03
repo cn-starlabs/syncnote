@@ -35,4 +35,6 @@ html, body {
     .prose-note pre { @apply bg-slate-100 dark:bg-slate-800 rounded p-3 overflow-x-auto my-2; }
     .prose-note pre code { @apply bg-transparent p-0; }
     .prose-note blockquote { @apply border-l-4 border-slate-300 dark:border-slate-700 pl-3 italic text-slate-600 dark:text-slate-400 my-2; }
+    .prose-note .katex-math-block { @apply my-3 overflow-x-auto py-2 text-center; }
+    .prose-note .katex-math-inline { @apply inline-block px-0.5; }
 }

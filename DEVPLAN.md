@@ -235,3 +235,24 @@ write throughput.
 Confirmed single-instance deployment — SQLite + in-process
 `tokio::sync::broadcast` for shared-page sync is the right fit, no need for
 a separate message broker or a networked DB.
+
+## Phase 7 — Math Formula Support (LaTeX / KaTeX)
+
+### Objective
+Enable inline (`$...$`) and block (`$$...$$`) math formulas in personal notes and collaborative shared pages without breaking raw HTML sanitization or code block formatting.
+
+### Architecture & Implementation
+1. **Markdown Processing Pipeline (`src/components/markdown.rs`)**:
+   - Extends the `pulldown-cmark` pipeline with formula syntax parsing.
+   - Ignores code spans (`<code>...</code>`) and code blocks (`<pre><code>...</code></pre>`) so programming code using `$` isn't mangled.
+   - Wraps inline math into `<span class="katex-math-inline" data-expr="...">...</span>`.
+   - Wraps block math into `<div class="katex-math-block" data-expr="...">...</div>`.
+   - HTML attribute values are safely escaped to prevent attribute injection.
+2. **KaTeX Integration (`src/app.rs`)**:
+   - Injects KaTeX stylesheet and runtime library in the document `<head>` via CDN.
+   - Defines `window.renderMathInSyncNote()` to scan for unrendered math elements and render them via KaTeX without throwing.
+3. **Reactive Leptos Preview Re-rendering**:
+   - An `Effect` in `MarkdownPreview` triggers `trigger_katex_render()` whenever the markdown body signal updates, ensuring live rendering during typing and live WebSocket synchronization.
+4. **Styling (`style/tailwind.css`)**:
+   - Added styling for centered block math with scrollable overflow and inline math formatting.
+
