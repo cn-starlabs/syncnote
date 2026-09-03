@@ -4,18 +4,35 @@
 
 use crate::models::PageEdit;
 
-#[cfg(feature = "hydrate")]
-pub struct SharedPageSocket {
-    ws: web_sys::WebSocket,
-    // Keeps the JS closure alive for the socket's lifetime.
-    _onmessage: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::MessageEvent)>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WsStatus {
+    Connecting,
+    Connected,
+    Disconnected,
+    Error,
 }
 
 #[cfg(feature = "hydrate")]
-pub fn connect_shared_page_ws(page_id: i64, on_message: impl Fn(PageEdit) + 'static) -> SharedPageSocket {
+pub struct SharedPageSocket {
+    ws: web_sys::WebSocket,
+    _onmessage: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::MessageEvent)>,
+    _onopen: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>,
+    _onclose: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::CloseEvent)>,
+    _onerror: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::ErrorEvent)>,
+}
+
+#[cfg(feature = "hydrate")]
+pub fn connect_shared_page_ws(
+    page_id: i64,
+    on_message: impl Fn(PageEdit) + 'static,
+    on_status: impl Fn(WsStatus) + 'static,
+) -> SharedPageSocket {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
-    use web_sys::{MessageEvent, WebSocket};
+    use web_sys::{CloseEvent, ErrorEvent, Event, MessageEvent, WebSocket};
+
+    let on_status = std::rc::Rc::new(on_status);
+    on_status(WsStatus::Connecting);
 
     let window = web_sys::window().expect("no window");
     let location = window.location();
@@ -33,7 +50,31 @@ pub fn connect_shared_page_ws(page_id: i64, on_message: impl Fn(PageEdit) + 'sta
     });
     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
-    SharedPageSocket { ws, _onmessage: onmessage }
+    let on_status_open = on_status.clone();
+    let onopen = Closure::<dyn FnMut(Event)>::new(move |_| {
+        on_status_open(WsStatus::Connected);
+    });
+    ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+
+    let on_status_close = on_status.clone();
+    let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |_| {
+        on_status_close(WsStatus::Disconnected);
+    });
+    ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
+
+    let on_status_err = on_status.clone();
+    let onerror = Closure::<dyn FnMut(ErrorEvent)>::new(move |_| {
+        on_status_err(WsStatus::Error);
+    });
+    ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
+
+    SharedPageSocket {
+        ws,
+        _onmessage: onmessage,
+        _onopen: onopen,
+        _onclose: onclose,
+        _onerror: onerror,
+    }
 }
 
 #[cfg(feature = "hydrate")]
@@ -58,7 +99,11 @@ impl Drop for SharedPageSocket {
 pub struct SharedPageSocket;
 
 #[cfg(not(feature = "hydrate"))]
-pub fn connect_shared_page_ws(_page_id: i64, _on_message: impl Fn(PageEdit) + 'static) -> SharedPageSocket {
+pub fn connect_shared_page_ws(
+    _page_id: i64,
+    _on_message: impl Fn(PageEdit) + 'static,
+    _on_status: impl Fn(WsStatus) + 'static,
+) -> SharedPageSocket {
     SharedPageSocket
 }
 

@@ -124,6 +124,29 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
         );
     };
 
+    let view_mode = RwSignal::new("split"); // "split" | "edit" | "preview"
+
+    let insert_snippet = {
+        let schedule_save = schedule_save.clone();
+        move |prefix: &'static str, suffix: &'static str, placeholder: &'static str| {
+            body.update(|b| {
+                if b.ends_with('\n') || b.is_empty() {
+                    b.push_str(&format!("{prefix}{placeholder}{suffix}"));
+                } else {
+                    b.push_str(&format!("\n{prefix}{placeholder}{suffix}"));
+                }
+            });
+            schedule_save();
+        }
+    };
+
+    let stats = move || {
+        let text = body.get();
+        let words = text.split_whitespace().count();
+        let chars = text.chars().count();
+        format!("{words} words · {chars} chars")
+    };
+
     view! {
         <div class="space-y-4">
             <div class="flex items-center gap-3">
@@ -140,6 +163,150 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
                     {move || if saved.get() { "Saved" } else { "Saving…" }}
                 </span>
+            </div>
+
+            // Editor Action Bar with Quick Snippet Buttons & View Mode Selector
+            <div class="flex flex-wrap items-center justify-between gap-2.5 pb-1">
+                // Quick Markdown & Math Action Chips
+                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("**", "**", "bold text")
+                        }
+                        title="Insert Bold (**text**)"
+                        class="px-2.5 py-1 font-semibold rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "B"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("*", "*", "italic text")
+                        }
+                        title="Insert Italic (*text*)"
+                        class="px-2.5 py-1 italic rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "I"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("### ", "", "Heading")
+                        }
+                        title="Insert Heading"
+                        class="px-2 py-1 font-medium rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "H3"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("$", "$", "E = mc^2")
+                        }
+                        title="Insert Inline Math ($formula$)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-brand-200 dark:border-brand-900/60 bg-brand-50/70 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 hover:bg-brand-100/70 dark:hover:bg-brand-900/40 transition font-mono font-medium"
+                    >
+                        "$f(x)$"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("$$\n", "\n$$", "\\sum_{i=1}^{n} x_i")
+                        }
+                        title="Insert Block Math ($$formula$$)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-brand-200 dark:border-brand-900/60 bg-brand-50/70 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 hover:bg-brand-100/70 dark:hover:bg-brand-900/40 transition font-mono font-medium"
+                    >
+                        "$$ Block $$"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("```rust\n", "\n```", "// code here")
+                        }
+                        title="Insert Code Block"
+                        class="px-2 py-1 font-mono text-[11px] rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "{ }"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("- [ ] ", "", "task item")
+                        }
+                        title="Insert Task checklist"
+                        class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "☑ Task"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |", "", "")
+                        }
+                        title="Insert Table"
+                        class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "⊞ Table"
+                    </button>
+                </div>
+
+                // View Mode Toggles & Word Count
+                <div class="flex items-center gap-3">
+                    <span class="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
+                        {stats}
+                    </span>
+
+                    <div class="inline-flex rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5 text-xs shadow-xs">
+                        <button
+                            type="button"
+                            on:click=move |_| view_mode.set("edit")
+                            class=move || {
+                                if view_mode.get() == "edit" {
+                                    "px-2.5 py-1 rounded-md bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300 font-medium"
+                                } else {
+                                    "px-2.5 py-1 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                                }
+                            }
+                        >
+                            "Edit"
+                        </button>
+                        <button
+                            type="button"
+                            on:click=move |_| view_mode.set("split")
+                            class=move || {
+                                if view_mode.get() == "split" {
+                                    "px-2.5 py-1 rounded-md bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300 font-medium"
+                                } else {
+                                    "px-2.5 py-1 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                                }
+                            }
+                        >
+                            "Split"
+                        </button>
+                        <button
+                            type="button"
+                            on:click=move |_| view_mode.set("preview")
+                            class=move || {
+                                if view_mode.get() == "preview" {
+                                    "px-2.5 py-1 rounded-md bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300 font-medium"
+                                } else {
+                                    "px-2.5 py-1 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                                }
+                            }
+                        >
+                            "Preview"
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="flex items-center justify-between gap-3">
@@ -244,20 +411,30 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                 </div>
             </Show>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <textarea
-                    prop:value=move || body.get()
-                    on:input=move |ev| {
-                        body.set(event_target_value(&ev));
-                        schedule_save();
-                    }
-                    rows="26"
-                    placeholder="Write Markdown (supports $math$ and $$block math$$)…"
-                    class="w-full min-h-[550px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 font-mono text-sm leading-relaxed text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-400 dark:hover:border-slate-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
-                ></textarea>
-                <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[550px]">
-                    <MarkdownPreview body=Signal::derive(move || body.get())/>
-                </div>
+            <div class=move || {
+                match view_mode.get() {
+                    "edit" => "grid grid-cols-1 gap-4",
+                    "preview" => "grid grid-cols-1 gap-4",
+                    _ => "grid grid-cols-1 lg:grid-cols-2 gap-4",
+                }
+            }>
+                <Show when=move || view_mode.get() != "preview">
+                    <textarea
+                        prop:value=move || body.get()
+                        on:input=move |ev| {
+                            body.set(event_target_value(&ev));
+                            schedule_save();
+                        }
+                        rows="26"
+                        placeholder="Write Markdown (supports $math$ and $$block math$$)…"
+                        class="w-full min-h-[550px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 font-mono text-sm leading-relaxed text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-400 dark:hover:border-slate-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
+                    ></textarea>
+                </Show>
+                <Show when=move || view_mode.get() != "edit">
+                    <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[550px]">
+                        <MarkdownPreview body=Signal::derive(move || body.get())/>
+                    </div>
+                </Show>
             </div>
         </div>
     }

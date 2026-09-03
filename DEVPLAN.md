@@ -256,3 +256,36 @@ Enable inline (`$...$`) and block (`$$...$$`) math formulas in personal notes an
 4. **Styling (`style/tailwind.css`)**:
    - Added styling for centered block math with scrollable overflow and inline math formatting.
 
+## Phase 8 — UI/UX & Editor Experience Polish
+
+### 1. Theme Switcher (Dark / Light Mode)
+- Added an interactive theme toggle in [`src/components/nav.rs`](src/components/nav.rs) with Sun/Moon icons, updating the HTML document root `dark` class and persisting state to `localStorage`.
+
+### 2. Modern Action Toolbar & View Mode Controls
+- **Editor Quick Toolbar**: In both [`NoteEditor`](src/pages/note_editor.rs) and [`SharedPageEditor`](src/pages/shared_page_editor.rs), added quick-insert chips for Bold, Italic, Headings, Code Blocks, Inline Math `$f(x)$`, Block Math `$$ Block $$`, Tasks, and Tables.
+- **View Mode Switcher**: Added responsive `Edit`, `Split`, and `Preview` modes allowing focused writing or full-width reading.
+- **Word & Character Count**: Added a live word and character count indicator in the editor toolbar.
+
+### 3. Safety & Feedback Polish
+- **Delete Note Confirmation Modal**: Added a modal in [`src/pages/dashboard.rs`](src/pages/dashboard.rs) to prevent accidental note deletion.
+- **Empty State**: Added an empty state with a direct CTA button in the notes dashboard.
+- **Unified Title Card Inputs**: Applied high-contrast card styling with focus rings to both personal notes and shared pages.
+
+## Phase 9 — Collaboration Polish
+
+### 1. Real-Time WebSocket Connection Status Indicator
+- Extended [`client_ws.rs`](src/client_ws.rs) with a `WsStatus` enum (`Connecting`, `Connected`, `Disconnected`, `Error`) and connected `onopen`, `onclose`, and `onerror` event listeners.
+- Integrated a live status badge in [`SharedPageEditor`](src/pages/shared_page_editor.rs):
+  - 🟢 **Live**: Emerald pulsing indicator when the WebSocket is actively connected.
+  - 🟡 **Connecting…**: Amber pinging indicator during initial connection or reconnection.
+  - 🔴 **Offline**: Rose indicator when the WebSocket connection is dropped or closed.
+
+### 2. Collaborator Avatars & Presence Badges
+- In [`SharedPageEditor`](src/pages/shared_page_editor.rs), added live collaborator avatar badges with member initial bubbles and count indicators (e.g., `+3`) to show everyone who has access to the shared page.
+
+### 3. Shared Page Management & Role Badging
+- Added color-coded role badges (`owner` in purple, `editor` in blue, `viewer` in neutral slate) in [`SharedPagesListPage`](src/pages/shared_pages_list.rs).
+- Added an owner-only delete button with a permanent deletion confirmation modal in the shared pages list.
+
+
+

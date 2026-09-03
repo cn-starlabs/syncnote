@@ -78,8 +78,75 @@ pub fn Nav() -> impl IntoView {
                             }
                         })}
                     </Suspense>
+
+                    <div class="ml-1 pl-2 border-l border-slate-200 dark:border-slate-800 flex items-center">
+                        <ThemeToggle/>
+                    </div>
                 </nav>
             </div>
         </header>
+    }
+}
+
+#[component]
+fn ThemeToggle() -> impl IntoView {
+    let dark_mode = RwSignal::new(false);
+
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move |_| {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    let is_dark = storage.get_item("dark-mode").ok().flatten() == Some("true".to_string());
+                    dark_mode.set(is_dark);
+                }
+            }
+        });
+    }
+
+    let toggle_theme = move |_| {
+        let new_val = !dark_mode.get();
+        dark_mode.set(new_val);
+        #[cfg(feature = "hydrate")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Some(doc) = window.document() {
+                    if let Some(root) = doc.document_element() {
+                        if new_val {
+                            let _ = root.class_list().add_1("dark");
+                        } else {
+                            let _ = root.class_list().remove_1("dark");
+                        }
+                    }
+                }
+                if let Ok(Some(storage)) = window.local_storage() {
+                    let _ = storage.set_item("dark-mode", if new_val { "true" } else { "false" });
+                }
+            }
+        }
+    };
+
+    view! {
+        <button
+            type="button"
+            on:click=toggle_theme
+            title="Toggle theme (Light / Dark)"
+            class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none transition-colors"
+        >
+            <Show
+                when=move || dark_mode.get()
+                fallback=|| view! {
+                    // Sun icon for switching to dark mode
+                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                }
+            >
+                // Moon icon for switching to light mode
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </Show>
+        </button>
     }
 }
