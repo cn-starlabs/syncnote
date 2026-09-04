@@ -3,7 +3,7 @@
 
 [server]
 ip = "0.0.0.0"
-port = 9099
+port = 7777
 site_root = "target/site"
 
 [database]
@@ -18,4 +18,4 @@ uploads_dir = "uploads"
 # Locally, browse via http://localhost:3000 (not 127.0.0.1) for these
 # defaults to work.
 rp_id = "localhost"
-rp_origin = "http://localhost:9099"
+rp_origin = "http://localhost:7777"
