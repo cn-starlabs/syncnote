@@ -43,9 +43,16 @@ fn render_math_formulas(html: &str) -> String {
     let len = bytes.len();
 
     while i < len {
-        if !in_code && (html[i..].starts_with("<code") || html[i..].starts_with("<pre")) {
+        // Scan on raw bytes, not `&str` slices: `html[i..]` panics whenever `i`
+        // lands inside a multi-byte UTF-8 character (any non-ASCII text — the
+        // crash this replaced happened on a note containing Chinese text). Byte
+        // slices have no such restriction, and since every tag we match on
+        // starts with an ASCII byte (`<`), any position where the byte check
+        // matches is guaranteed to already be a valid `&str` char boundary —
+        // so the `&str` slices below stay safe without checking `i` itself.
+        if !in_code && (bytes[i..].starts_with(b"<code") || bytes[i..].starts_with(b"<pre")) {
             // Find closing '>'
-            if let Some(tag_end) = html[i..].find('>') {
+            if let Some(tag_end) = bytes[i..].iter().position(|&b| b == b'>') {
                 let chunk = &html[last_idx..i];
                 result.push_str(&process_math_in_text(chunk));
                 let end = i + tag_end + 1;
@@ -55,8 +62,8 @@ fn render_math_formulas(html: &str) -> String {
                 in_code = true;
                 continue;
             }
-        } else if in_code && (html[i..].starts_with("</code>") || html[i..].starts_with("</pre>")) {
-            if let Some(tag_end) = html[i..].find('>') {
+        } else if in_code && (bytes[i..].starts_with(b"</code>") || bytes[i..].starts_with(b"</pre>")) {
+            if let Some(tag_end) = bytes[i..].iter().position(|&b| b == b'>') {
                 let end = i + tag_end + 1;
                 result.push_str(&html[last_idx..end]);
                 last_idx = end;
@@ -171,17 +178,25 @@ fn escape_attribute(out: &mut String, val: &str) {
 }
 
 /// Triggers KaTeX auto-rendering on the client after preview updates.
+///
+/// The binding below MUST use `catch` — without it, if `window.renderMathInSyncNote`
+/// throws (or isn't defined yet, e.g. a slow/blocked KaTeX CDN load), the exception
+/// can't cross the wasm-bindgen FFI boundary as a normal error: it traps the entire
+/// wasm instance ("RuntimeError: unreachable executed"), which kills all reactivity
+/// until a full page reload. `catch` converts that into an ordinary `Result` instead.
 #[cfg(feature = "hydrate")]
 pub fn trigger_katex_render() {
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen]
     extern "C" {
-        #[wasm_bindgen(js_namespace = window, js_name = renderMathInSyncNote)]
-        fn render_math_in_sync_note();
+        #[wasm_bindgen(js_namespace = window, js_name = renderMathInSyncNote, catch)]
+        fn render_math_in_sync_note() -> Result<(), JsValue>;
     }
 
-    let _ = render_math_in_sync_note();
+    if let Err(e) = render_math_in_sync_note() {
+        leptos::logging::warn!("katex render hook failed (non-fatal): {e:?}");
+    }
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -189,14 +204,24 @@ pub fn trigger_katex_render() {}
 
 #[component]
 pub fn MarkdownPreview(#[prop(into)] body: Signal<String>) -> impl IntoView {
+    // Debounced (not just delayed): without this, every keystroke schedules its
+    // own set_timeout, and a burst of rapid body changes (typing fast, or a full
+    // remount on navigation) piles up many overlapping pending calls into the
+    // wasm-bindgen-futures task executor — which has been observed to panic with
+    // "RefCell already borrowed" under that kind of reentrant load. Only the most
+    // recently scheduled call is allowed to actually fire.
+    let epoch = RwSignal::new(0u32);
     Effect::new(move |_| {
         let _ = body.get();
-        // Give DOM brief tick to hydrate/paint before invoking KaTeX renderer
+        let my_epoch = epoch.get_untracked() + 1;
+        epoch.set(my_epoch);
         set_timeout(
             move || {
-                trigger_katex_render();
+                if epoch.get_untracked() == my_epoch {
+                    trigger_katex_render();
+                }
             },
-            std::time::Duration::from_millis(20),
+            std::time::Duration::from_millis(50),
         );
     });
 
