@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
+use leptos_router::hooks::use_navigate;
 
 use crate::auth::refresh_auth;
 use crate::server::auth_fns::Register;
@@ -9,14 +10,26 @@ pub fn RegisterPage() -> impl IntoView {
     let action = ServerAction::<Register>::new();
     let pending = action.pending();
     let result = action.value();
+    let navigate = use_navigate();
 
-    Effect::new(move |_| {
-        if let Some(Ok(outcome)) = result.get() {
-            if outcome.ok {
-                refresh_auth();
+    {
+        let navigate = navigate.clone();
+        Effect::new(move |_| {
+            if let Some(Ok(outcome)) = result.get() {
+                if outcome.ok {
+                    refresh_auth();
+                    #[cfg(feature = "hydrate")]
+                    {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().assign("/app");
+                            return;
+                        }
+                    }
+                    navigate("/app", Default::default());
+                }
             }
-        }
-    });
+        });
+    }
 
     let error_msg = move || match result.get() {
         Some(Ok(o)) if !o.ok => o.message.unwrap_or_else(|| "Registration failed".into()),

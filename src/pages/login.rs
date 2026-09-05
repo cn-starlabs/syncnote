@@ -17,16 +17,28 @@ pub fn LoginPage() -> impl IntoView {
     let reset_pending = reset_action.pending();
     let reset_result = reset_action.value();
 
+    let navigate = use_navigate();
     let is_forgot_mode = RwSignal::new(false);
     let forgot_email = RwSignal::new(String::new());
 
-    Effect::new(move |_| {
-        if let Some(Ok(outcome)) = result.get() {
-            if outcome.ok {
-                refresh_auth();
+    {
+        let navigate = navigate.clone();
+        Effect::new(move |_| {
+            if let Some(Ok(outcome)) = result.get() {
+                if outcome.ok {
+                    refresh_auth();
+                    #[cfg(feature = "hydrate")]
+                    {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().assign("/app");
+                            return;
+                        }
+                    }
+                    navigate("/app", Default::default());
+                }
             }
-        }
-    });
+        });
+    }
 
     let error_msg = move || match result.get() {
         Some(Ok(o)) if !o.ok => o.message.unwrap_or_else(|| "Sign in failed".into()),
@@ -39,8 +51,6 @@ pub fn LoginPage() -> impl IntoView {
         Some(Err(_)) => (false, "Failed to send reset email, please try again".to_string()),
         _ => (true, String::new()),
     };
-
-    let navigate = use_navigate();
 
     let passkey_pending = RwSignal::new(false);
     let passkey_error = RwSignal::new(Option::<String>::None);
