@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" width="160" height="40" fill="none">
+  <defs>
+    <!-- Modern Gradient for Main Note Mark -->
+    <linearGradient id="logoDocGrad" x1="6" y1="4" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4338CA"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+
+    <!-- Fold Gradient -->
+    <linearGradient id="logoFoldGrad" x1="22" y1="4" x2="32" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C7D2FE"/>
+      <stop offset="100%" stop-color="#EEF2FF"/>
+    </linearGradient>
+
+    <!-- Sync Orbit Gradient -->
+    <linearGradient id="orbitGrad" x1="22" y1="18" x2="40" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+
+    <!-- Subtle Glow / Shadow for Badge -->
+    <filter id="pageLogoGlow" x="18" y="16" width="24" height="24" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#312E81" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- ICON EMBLEM (0 to 42) -->
+  <g id="emblem">
+    <!-- Back Note Page -->
+    <rect x="4" y="6" width="22" height="28" rx="4" fill="#818CF8" opacity="0.35" transform="rotate(-6 4 6)"/>
+
+    <!-- Front Note Document -->
+    <path d="M8 5C8 3.89543 8.89543 3 10 3H24L34 13V33C34 34.1046 33.1046 35 32 35H10C8.89543 35 8 34.1046 8 33V5Z"
+          fill="url(#logoDocGrad)"/>
+
+    <!-- Document Fold -->
+    <path d="M24 3L34 13H26C24.8954 13 24 12.1046 24 11V3Z"
+          fill="url(#logoFoldGrad)"/>
+
+    <!-- Lines inside document -->
+    <rect x="13" y="14" width="7" height="2" rx="1" fill="white" fill-opacity="0.9"/>
+    <rect x="13" y="19" width="13" height="2" rx="1" fill="white" fill-opacity="0.9"/>
+    <rect x="13" y="24" width="9" height="2" rx="1" fill="white" fill-opacity="0.75"/>
+    <rect x="13" y="29" width="6" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+
+    <!-- Sync Orb / Badge -->
+    <g filter="url(#pageLogoGlow)">
+      <circle cx="30" cy="27" r="9" fill="white" class="dark-ring"/>
+      <circle cx="30" cy="27" r="7.5" fill="url(#orbitGrad)"/>
+
+      <!-- Arrows in circle -->
+      <path d="M30 22.5C32.5 22.5 34.5 24.5 34.5 27C34.5 27.6 34.3 28.2 34 28.7"
+            stroke="white" stroke-width="1.3" stroke-linecap="round"/>
+      <polygon points="34,28.7 32,26.5 35.8,26.5" fill="white"/>
+
+      <path d="M30 31.5C27.5 31.5 25.5 29.5 25.5 27C25.5 26.4 25.7 25.8 26 25.3"
+            stroke="white" stroke-width="1.3" stroke-linecap="round"/>
+      <polygon points="26,25.3 28,27.5 24.2,27.5" fill="white"/>
+    </g>
+  </g>
+
+  <!-- WORDMARK: SyncNote -->
+  <text x="48" y="26" font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" letter-spacing="-0.03em" fill="currentColor">
+    <tspan fill="#4F46E5" class="brand-text">Sync</tspan><tspan fill="#0F172A" class="dark-text">Note</tspan>
+  </text>
+</svg>
