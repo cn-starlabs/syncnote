@@ -175,10 +175,23 @@ pub async fn serve_attachment(Path(id): Path<i64>, State(state): State<AppState>
     };
 
     // A library file has no scope_id to check permissions against — it's a
-    // personal file, so only its owner can view it (even once its URL has
-    // been pasted into a note's Markdown).
+    // personal file, so only its owner or someone it's been directly shared
+    // with (file_shares) can view it, even once its URL has been pasted into
+    // a note's Markdown.
     let allowed = if scope == "library" {
-        owner_id == user.id
+        if owner_id == user.id {
+            true
+        } else {
+            let shared: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM file_shares WHERE attachment_id = ? AND shared_with_user_id = ?")
+                    .bind(id)
+                    .bind(user.id)
+                    .fetch_optional(&state.pool.0)
+                    .await
+                    .ok()
+                    .flatten();
+            shared.is_some()
+        }
     } else {
         can_read(&state.pool.0, user.id, &scope, scope_id.unwrap_or(0)).await
     };
@@ -187,7 +200,54 @@ pub async fn serve_attachment(Path(id): Path<i64>, State(state): State<AppState>
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let path = state.uploads_dir.join(&stored_name);
+    read_and_serve(&state.uploads_dir, &stored_name, &filename, &content_type).await
+}
+
+/// Public, unauthenticated download via a share link created from `/app/files`
+/// — the unguessable token is the only credential, same trust model as the
+/// existing shared-page invite links. Enforces expiry and an optional
+/// download-count cap, incrementing the counter atomically (in the same
+/// `UPDATE ... WHERE` as the cap check) so two simultaneous downloads can't
+/// both slip through on the last remaining slot.
+pub async fn serve_shared_file(Path(token): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
+    let updated: Option<(i64,)> = sqlx::query_as(
+        "UPDATE file_share_links SET download_count = download_count + 1 \
+         WHERE token = ? \
+           AND (expires_at IS NULL OR expires_at > datetime('now')) \
+           AND (max_downloads IS NULL OR download_count < max_downloads) \
+         RETURNING attachment_id",
+    )
+    .bind(&token)
+    .fetch_optional(&state.pool.0)
+    .await
+    .unwrap_or(None);
+
+    let Some((attachment_id,)) = updated else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let row: Option<(String, String, String)> =
+        sqlx::query_as("SELECT filename, content_type, stored_name FROM attachments WHERE id = ?")
+            .bind(attachment_id)
+            .fetch_optional(&state.pool.0)
+            .await
+            .unwrap_or(None);
+
+    let Some((filename, content_type, stored_name)) = row else {
+        tracing::error!("share link {token} pointed at missing attachment id={attachment_id}");
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    read_and_serve(&state.uploads_dir, &stored_name, &filename, &content_type).await
+}
+
+async fn read_and_serve(
+    uploads_dir: &std::path::Path,
+    stored_name: &str,
+    filename: &str,
+    content_type: &str,
+) -> axum::response::Response {
+    let path = uploads_dir.join(stored_name);
     let bytes = match tokio::fs::read(&path).await {
         Ok(b) => b,
         Err(e) => {
@@ -198,7 +258,7 @@ pub async fn serve_attachment(Path(id): Path<i64>, State(state): State<AppState>
 
     (
         [
-            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_TYPE, content_type.to_string()),
             (header::CONTENT_DISPOSITION, format!("inline; filename=\"{filename}\"")),
         ],
         bytes,

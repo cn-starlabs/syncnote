@@ -2,6 +2,7 @@ pub mod admin_invite_fns;
 pub mod admin_user_fns;
 pub mod attachment_fns;
 pub mod auth_fns;
+pub mod file_share_fns;
 pub mod invite_fns;
 pub mod note_fns;
 pub mod passkey_fns;

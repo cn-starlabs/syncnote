@@ -25,4 +25,27 @@ pub struct AttachmentInfo {
     pub scope_title: Option<String>,
     pub scope_link: Option<String>,
     pub url: String,
+    /// `false` when this row is here because someone else shared it with the
+    /// current user, not because they own it — the Files page hides
+    /// Delete/Share for those.
+    pub is_owner: bool,
+    pub shared_by_email: Option<String>,
+}
+
+/// One user a file has been directly shared with.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FileShareInfo {
+    pub user_id: i64,
+    pub email: String,
+}
+
+/// A public download link for a file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FileShareLink {
+    pub token: String,
+    pub url: String,
+    pub expires_at: Option<String>,
+    pub max_downloads: Option<i64>,
+    pub download_count: i64,
+    pub created_at: String,
 }

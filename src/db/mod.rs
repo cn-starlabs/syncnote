@@ -42,6 +42,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             "0007_attachments_library_scope",
             include_str!("../../migrations/0007_attachments_library_scope.sql"),
         ),
+        ("0008_file_sharing", include_str!("../../migrations/0008_file_sharing.sql")),
     ];
 
     for (name, sql) in migrations {

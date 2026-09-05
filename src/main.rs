@@ -10,7 +10,7 @@ async fn main() {
     use syncnote::app::{shell, App};
     use syncnote::config::AppConfig;
     use syncnote::db;
-    use syncnote::server::attachments::{serve_attachment, upload_handler};
+    use syncnote::server::attachments::{serve_attachment, serve_shared_file, upload_handler};
     use syncnote::server::ws::ws_handler;
     use syncnote::server_ctx::{AppPool, AppState, Rooms, UploadsDir, WebauthnState};
     use tower_http::compression::CompressionLayer;
@@ -84,6 +84,7 @@ async fn main() {
             post(upload_handler).layer(DefaultBodyLimit::max(11 * 1024 * 1024)),
         )
         .route("/attachments/{id}", get(serve_attachment))
+        .route("/share/{token}", get(serve_shared_file))
         .leptos_routes_with_context(
             &state,
             routes,
