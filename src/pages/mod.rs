@@ -2,6 +2,7 @@ pub mod account;
 pub mod admin_invites;
 pub mod admin_users;
 pub mod dashboard;
+pub mod files;
 pub mod home;
 pub mod join_invite;
 pub mod login;

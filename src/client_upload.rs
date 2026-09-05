@@ -10,7 +10,7 @@ use crate::models::UploadResult;
 pub fn upload_from_change_event(
     ev: web_sys::Event,
     scope: String,
-    scope_id: i64,
+    scope_id: Option<i64>,
     on_done: impl Fn(Result<UploadResult, String>) + 'static,
 ) {
     use wasm_bindgen::JsCast;
@@ -29,8 +29,9 @@ pub fn upload_from_change_event(
         let result: Result<UploadResult, String> = async {
             let form = FormData::new().map_err(|_| "could not build form".to_string())?;
             form.append_with_str("scope", &scope).map_err(|_| "form error".to_string())?;
-            form.append_with_str("scope_id", &scope_id.to_string())
-                .map_err(|_| "form error".to_string())?;
+            if let Some(id) = scope_id {
+                form.append_with_str("scope_id", &id.to_string()).map_err(|_| "form error".to_string())?;
+            }
             form.append_with_blob("file", &file).map_err(|_| "form error".to_string())?;
 
             let opts = RequestInit::new();
@@ -68,7 +69,7 @@ pub fn upload_from_change_event(
 pub fn upload_from_change_event<E>(
     _ev: E,
     _scope: String,
-    _scope_id: i64,
+    _scope_id: Option<i64>,
     _on_done: impl Fn(Result<UploadResult, String>) + 'static,
 ) {
 }

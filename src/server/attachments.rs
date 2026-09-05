@@ -63,9 +63,12 @@ async fn can_read(pool: &SqlitePool, user_id: i64, scope: &str, scope_id: i64) -
     found.is_some()
 }
 
-/// `scope` is "note" or "shared_page"; `scope_id` is the id of that note/page.
-/// Caller must already have edit access to the scope (owner of the note, or
-/// owner/editor of the shared page) — checked here, not trusted from the client.
+/// `scope` is "note", "shared_page", or "library". `scope_id` is the id of
+/// that note/page — required for "note"/"shared_page", absent for "library"
+/// (a personal file not tied to any specific note/page at upload time).
+/// Caller must already have edit access to the scope (owner of the note,
+/// owner/editor of the shared page, or just any signed-in user for their own
+/// library) — checked here, not trusted from the client.
 pub async fn upload_handler(State(state): State<AppState>, session: Session, mut multipart: Multipart) -> impl IntoResponse {
     let user = match sess::current_user(&session, &state.pool.0).await {
         Ok(Some(u)) => u,
@@ -96,14 +99,23 @@ pub async fn upload_handler(State(state): State<AppState>, session: Session, mut
         }
     }
 
-    let (Some(scope), Some(scope_id), Some(data)) = (scope, scope_id, data) else {
-        return (StatusCode::BAD_REQUEST, "missing scope, scope_id, or file").into_response();
+    let (Some(scope), Some(data)) = (scope, data) else {
+        return (StatusCode::BAD_REQUEST, "missing scope or file").into_response();
     };
     if data.len() > MAX_UPLOAD_BYTES {
         return (StatusCode::PAYLOAD_TOO_LARGE, "file too large (max 10MB)").into_response();
     }
-    if !can_write(&state.pool.0, user.id, &scope, scope_id).await {
-        return (StatusCode::FORBIDDEN, "not permitted").into_response();
+
+    match scope.as_str() {
+        "library" => {} // any signed-in user may upload to their own library
+        _ => {
+            let Some(sid) = scope_id else {
+                return (StatusCode::BAD_REQUEST, "missing scope_id").into_response();
+            };
+            if !can_write(&state.pool.0, user.id, &scope, sid).await {
+                return (StatusCode::FORBIDDEN, "not permitted").into_response();
+            }
+        }
     }
 
     let stored_name = gen_token();
@@ -149,20 +161,28 @@ pub async fn serve_attachment(Path(id): Path<i64>, State(state): State<AppState>
         _ => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    let row: Option<(String, i64, String, String, String)> = sqlx::query_as(
-        "SELECT scope, scope_id, filename, content_type, stored_name FROM attachments WHERE id = ?",
+    let row: Option<(i64, String, Option<i64>, String, String, String)> = sqlx::query_as(
+        "SELECT owner_id, scope, scope_id, filename, content_type, stored_name FROM attachments WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(&state.pool.0)
     .await
     .unwrap_or(None);
 
-    let Some((scope, scope_id, filename, content_type, stored_name)) = row else {
+    let Some((owner_id, scope, scope_id, filename, content_type, stored_name)) = row else {
         tracing::warn!("Attachment id={id} not found in database");
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    if !can_read(&state.pool.0, user.id, &scope, scope_id).await {
+    // A library file has no scope_id to check permissions against — it's a
+    // personal file, so only its owner can view it (even once its URL has
+    // been pasted into a note's Markdown).
+    let allowed = if scope == "library" {
+        owner_id == user.id
+    } else {
+        can_read(&state.pool.0, user.id, &scope, scope_id.unwrap_or(0)).await
+    };
+    if !allowed {
         tracing::warn!("User id={} forbidden from reading attachment id={id}", user.id);
         return StatusCode::FORBIDDEN.into_response();
     }

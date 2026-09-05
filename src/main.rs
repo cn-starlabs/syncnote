@@ -12,7 +12,7 @@ async fn main() {
     use syncnote::db;
     use syncnote::server::attachments::{serve_attachment, upload_handler};
     use syncnote::server::ws::ws_handler;
-    use syncnote::server_ctx::{AppPool, AppState, Rooms, WebauthnState};
+    use syncnote::server_ctx::{AppPool, AppState, Rooms, UploadsDir, WebauthnState};
     use tower_http::compression::CompressionLayer;
     use tower_http::trace::TraceLayer;
     use tower_sessions::cookie::time::Duration as CookieDuration;
@@ -99,6 +99,7 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(Extension(AppPool(state.pool.0.clone())))
         .layer(Extension(state.webauthn.clone()))
+        .layer(Extension(UploadsDir(state.uploads_dir.clone())))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(session_layer)

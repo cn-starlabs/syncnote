@@ -10,6 +10,7 @@ use crate::pages::account::AccountPage;
 use crate::pages::admin_invites::AdminInvitesPage;
 use crate::pages::admin_users::AdminUsersPage;
 use crate::pages::dashboard::DashboardPage;
+use crate::pages::files::FilesPage;
 use crate::pages::home::HomePage;
 use crate::pages::join_invite::JoinInvitePage;
 use crate::pages::login::LoginPage;
@@ -88,6 +89,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/shared") view=SharedPagesListPage/>
                         <Route path=path!("/shared/:id") view=SharedPageEditorPage/>
                         <Route path=path!("/account") view=AccountPage/>
+                        <Route path=path!("/files") view=FilesPage/>
                         <ParentRoute path=path!("/admin") view=AdminGate>
                             <Route path=path!("/invites") view=AdminInvitesPage/>
                             <Route path=path!("/users") view=AdminUsersPage/>

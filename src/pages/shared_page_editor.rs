@@ -278,7 +278,7 @@ fn SharedPageEditor(page: SharedPage, initial_members: Vec<SharedPageMember>) ->
                                 class="hidden"
                                 on:change=move |ev| {
                                     upload_error.set(None);
-                                    upload_from_change_event(ev, "shared_page".to_string(), page_id, move |res| {
+                                    upload_from_change_event(ev, "shared_page".to_string(), Some(page_id), move |res| {
                                         match res {
                                             Ok(u) => {
                                                 let md = if u.content_type.starts_with("image/") {

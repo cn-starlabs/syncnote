@@ -50,6 +50,7 @@ pub fn Nav() -> impl IntoView {
                                 Ok(Some(user)) => view! {
                                     <A href="/app" attr:class=link_class("/app", true)>"My notes"</A>
                                     <A href="/app/shared" attr:class=link_class("/app/shared", false)>"Shared pages"</A>
+                                    <A href="/app/files" attr:class=link_class("/app/files", false)>"Files"</A>
                                     {user.is_admin.then(|| view! {
                                         <A href="/app/admin/users" attr:class=link_class("/app/admin", false)>"Admin"</A>
                                     })}

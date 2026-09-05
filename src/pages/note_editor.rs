@@ -1,12 +1,14 @@
 use std::time::Duration;
 
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos_router::hooks::use_params_map;
 
 use crate::client_upload::upload_from_change_event;
 use crate::components::markdown::MarkdownPreview;
 use crate::components::notes_sidebar::NotesSidebar;
-use crate::models::Note;
+use crate::models::{AttachmentInfo, Note};
+use crate::server::attachment_fns::list_library_attachments;
 use crate::server::note_fns::{get_note, SaveNote, SendNoteViaEmail};
 
 #[component]
@@ -75,6 +77,23 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let epoch = RwSignal::new(0u32);
     let saved = RwSignal::new(true);
     let upload_error = RwSignal::new(Option::<String>::None);
+    let library_open = RwSignal::new(false);
+    let library_files = RwSignal::new(Option::<Vec<AttachmentInfo>>::None);
+    let library_error = RwSignal::new(Option::<String>::None);
+
+    let toggle_library = move |_| {
+        let now_open = !library_open.get_untracked();
+        library_open.set(now_open);
+        if now_open && library_files.get_untracked().is_none() {
+            library_error.set(None);
+            spawn_local(async move {
+                match list_library_attachments().await {
+                    Ok(files) => library_files.set(Some(files)),
+                    Err(e) => library_error.set(Some(e.to_string())),
+                }
+            });
+        }
+    };
 
     let send_mail_action = ServerAction::<SendNoteViaEmail>::new();
     let email_modal_open = RwSignal::new(false);
@@ -318,7 +337,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                             class="hidden"
                             on:change=move |ev| {
                                 upload_error.set(None);
-                                upload_from_change_event(ev, "note".to_string(), id, move |res| {
+                                upload_from_change_event(ev, "note".to_string(), Some(id), move |res| {
                                     match res {
                                         Ok(u) => {
                                             let md = if u.content_type.starts_with("image/") {
@@ -335,6 +354,64 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                             }
                         />
                     </label>
+
+                    <div class="relative">
+                        <button
+                            type="button"
+                            on:click=toggle_library
+                            class="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm transition"
+                        >
+                            "From library"
+                        </button>
+                        <Show when=move || library_open.get()>
+                            <div class="absolute left-0 top-full mt-1 z-20 w-64 max-h-72 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-2">
+                                <Show when=move || library_error.get().is_some()>
+                                    <p class="text-xs text-rose-500 p-1">{move || library_error.get().unwrap_or_default()}</p>
+                                </Show>
+                                {move || match library_files.get() {
+                                    None => view! { <p class="text-xs text-slate-500 dark:text-slate-400 p-1">"Loading…"</p> }.into_any(),
+                                    Some(files) if files.is_empty() => view! {
+                                        <p class="text-xs text-slate-500 dark:text-slate-400 p-1">
+                                            "No files in your library yet — upload some from the Files page."
+                                        </p>
+                                    }.into_any(),
+                                    Some(files) => view! {
+                                        <ul class="space-y-0.5">
+                                            <For
+                                                each=move || files.clone()
+                                                key=|f| f.id
+                                                children=move |f| {
+                                                    let filename = f.filename.clone();
+                                                    let content_type = f.content_type.clone();
+                                                    let url = f.url.clone();
+                                                    view! {
+                                                        <li>
+                                                            <button
+                                                                type="button"
+                                                                on:click=move |_| {
+                                                                    let md = if content_type.starts_with("image/") {
+                                                                        format!("\n\n![{filename}]({url})\n\n")
+                                                                    } else {
+                                                                        format!("\n\n[{filename}]({url})\n\n")
+                                                                    };
+                                                                    body.update(|b| b.push_str(&md));
+                                                                    schedule_save();
+                                                                    library_open.set(false);
+                                                                }
+                                                                class="w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 truncate text-slate-700 dark:text-slate-300"
+                                                            >
+                                                                {f.filename.clone()}
+                                                            </button>
+                                                        </li>
+                                                    }
+                                                }
+                                            />
+                                        </ul>
+                                    }.into_any(),
+                                }}
+                            </div>
+                        </Show>
+                    </div>
 
                     <button
                         type="button"

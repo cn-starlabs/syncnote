@@ -14,6 +14,9 @@ pub struct AppPool(pub SqlitePool);
 #[derive(Clone)]
 pub struct WebauthnState(pub Arc<webauthn_rs::prelude::Webauthn>);
 
+#[derive(Clone)]
+pub struct UploadsDir(pub PathBuf);
+
 /// One broadcast channel per open shared page, created lazily on first
 /// connect and left in the map afterward (cheap: an idle channel with no
 /// subscribers costs almost nothing, and pages get revisited often enough
@@ -61,5 +64,11 @@ impl FromRef<AppState> for Rooms {
 impl FromRef<AppState> for WebauthnState {
     fn from_ref(state: &AppState) -> Self {
         state.webauthn.clone()
+    }
+}
+
+impl FromRef<AppState> for UploadsDir {
+    fn from_ref(state: &AppState) -> Self {
+        UploadsDir(state.uploads_dir.clone())
     }
 }

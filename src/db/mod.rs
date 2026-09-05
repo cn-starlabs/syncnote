@@ -34,6 +34,14 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("0003_admin_invites", include_str!("../../migrations/0003_admin_invites.sql")),
         ("0004_passkeys", include_str!("../../migrations/0004_passkeys.sql")),
         ("0005_user_management", include_str!("../../migrations/0005_user_management.sql")),
+        (
+            "0006_attachments_owner_index",
+            include_str!("../../migrations/0006_attachments_owner_index.sql"),
+        ),
+        (
+            "0007_attachments_library_scope",
+            include_str!("../../migrations/0007_attachments_library_scope.sql"),
+        ),
     ];
 
     for (name, sql) in migrations {
