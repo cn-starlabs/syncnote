@@ -14,6 +14,15 @@ pub struct ServerConfig {
     pub ip: IpAddr,
     pub port: u16,
     pub site_root: String,
+    /// Overrides whether the session cookie gets the `Secure` flag. Leave
+    /// unset (the default) to derive it from `webauthn.rp_origin`'s scheme —
+    /// `Secure` when it's `https`, not otherwise. Only set this explicitly to
+    /// `false` on a deployment that is NOT also reachable over HTTPS by real
+    /// users (e.g. a LAN-only/testing instance) — forcing it off while also
+    /// serving real traffic over HTTPS would let the session cookie be sent
+    /// unencrypted if that traffic were ever downgraded to plain HTTP.
+    #[serde(default)]
+    pub cookie_secure: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

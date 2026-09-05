@@ -54,9 +54,11 @@ async fn main() {
         .expect("failed to build webauthn");
 
     // Cookies can only carry the Secure flag over an https origin, so this
-    // tracks whichever scheme config.toml's webauthn.rp_origin declares —
-    // the same origin the app is actually served on.
-    let cookie_secure = rp_origin.scheme() == "https";
+    // defaults to whichever scheme config.toml's webauthn.rp_origin declares
+    // — the same origin the app is actually served on — unless explicitly
+    // overridden via server.cookie_secure (see its doc comment in config.rs
+    // for when that's actually safe to do).
+    let cookie_secure = cfg.server.cookie_secure.unwrap_or_else(|| rp_origin.scheme() == "https");
 
     let state = AppState {
         leptos_options: leptos_options.clone(),

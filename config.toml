@@ -5,6 +5,14 @@
 ip = "0.0.0.0"
 port = 7777
 site_root = "target/site"
+# The session cookie normally gets the Secure flag automatically whenever
+# webauthn.rp_origin below is "https://...". Uncomment to force it off — only
+# do this if this exact deployment is NOT also reached over HTTPS by real
+# users (e.g. this config.toml is serving a LAN-only/testing instance).
+# Forcing it off on a config that's also public over HTTPS would let the
+# session cookie be sent unencrypted if that traffic were ever downgraded to
+# plain HTTP.
+cookie_secure = false
 
 [database]
 path = "app.db"

@@ -109,41 +109,51 @@ pub fn NotesSidebar(
                                 </p>
                             }.into_any()
                         } else {
+                            // `<For>`, not a manual `.map(...).collect::<Vec<_>>()`: the
+                            // latter is a reactive fragment rendering a variable-length
+                            // list without `<For>`'s keyed SSR/hydration marker scheme,
+                            // which caused a hydration panic in production (tachys
+                            // hydration.rs "unreachable code") — same root cause already
+                            // fixed this way in shared_page_editor.rs and dashboard.rs.
                             view! {
                                 <ul class="space-y-1">
-                                    {visible.into_iter().map(|note| {
-                                        let id = note.id;
-                                        let on_selected = on_note_selected;
-                                        let title = if note.title.trim().is_empty() {
-                                            "Untitled".to_string()
-                                        } else {
-                                            note.title.clone()
-                                        };
+                                    <For
+                                        each=move || visible.clone()
+                                        key=|note| note.id
+                                        children=move |note| {
+                                            let id = note.id;
+                                            let on_selected = on_note_selected;
+                                            let title = if note.title.trim().is_empty() {
+                                                "Untitled".to_string()
+                                            } else {
+                                                note.title.clone()
+                                            };
 
-                                        view! {
-                                            <li>
-                                                <A
-                                                    href=format!("/app/note/{id}")
-                                                    attr:class=move || {
-                                                        let is_active = current_note_id.get() == Some(id);
-                                                        if is_active {
-                                                            "flex flex-col rounded-lg px-2.5 py-2 bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-brand-300 font-medium text-xs border border-brand-200 dark:border-brand-800/60"
-                                                        } else {
-                                                            "flex flex-col rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-xs transition"
+                                            view! {
+                                                <li>
+                                                    <A
+                                                        href=format!("/app/note/{id}")
+                                                        attr:class=move || {
+                                                            let is_active = current_note_id.get() == Some(id);
+                                                            if is_active {
+                                                                "flex flex-col rounded-lg px-2.5 py-2 bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-brand-300 font-medium text-xs border border-brand-200 dark:border-brand-800/60"
+                                                            } else {
+                                                                "flex flex-col rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-xs transition"
+                                                            }
                                                         }
-                                                    }
-                                                    on:click=move |_| {
-                                                        if let Some(cb) = on_selected {
-                                                            cb.run(());
+                                                        on:click=move |_| {
+                                                            if let Some(cb) = on_selected {
+                                                                cb.run(());
+                                                            }
                                                         }
-                                                    }
-                                                >
-                                                    <span class="truncate font-medium">{title}</span>
-                                                    <span class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{note.updated_at}</span>
-                                                </A>
-                                            </li>
+                                                    >
+                                                        <span class="truncate font-medium">{title}</span>
+                                                        <span class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{note.updated_at}</span>
+                                                    </A>
+                                                </li>
+                                            }
                                         }
-                                    }).collect::<Vec<_>>()}
+                                    />
                                 </ul>
 
                                 {if total_count > limit {
