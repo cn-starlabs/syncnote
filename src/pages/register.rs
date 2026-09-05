@@ -41,7 +41,7 @@ pub fn RegisterPage() -> impl IntoView {
         <div class="max-w-md mx-auto">
             <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-800 p-6 sm:p-8">
                 <h1 class="text-xl font-semibold text-slate-900 dark:text-slate-100">"Sign up"</h1>
-                <p class="mt-1 text-sm text-slate-500">"Create an account to start taking notes."</p>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">"Create an account to start taking notes."</p>
 
                 <ActionForm action=action attr:class="mt-6 space-y-4">
                     <div>
@@ -74,7 +74,7 @@ pub fn RegisterPage() -> impl IntoView {
                     </button>
                 </ActionForm>
 
-                <p class="mt-4 text-xs text-slate-500 text-center">
+                <p class="mt-4 text-xs text-slate-500 dark:text-slate-400 text-center">
                     "Already have an account? "
                     <A href="/login" attr:class="text-brand-600 hover:underline">"Sign in"</A>
                 </p>

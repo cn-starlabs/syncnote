@@ -56,7 +56,7 @@ pub fn current_user() -> AuthUser {
 #[component]
 fn AuthLoading() -> impl IntoView {
     view! {
-        <div class="py-20 text-center text-sm text-slate-500">"Loading…"</div>
+        <div class="py-20 text-center text-sm text-slate-500 dark:text-slate-400">"Loading…"</div>
     }
 }
 

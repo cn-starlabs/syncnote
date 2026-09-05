@@ -30,7 +30,7 @@ pub fn SharedPagesListPage() -> impl IntoView {
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">"Shared pages"</h1>
-                    <p class="text-xs text-slate-500 mt-0.5">"Pages you collaborate on in real-time"</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">"Pages you collaborate on in real-time"</p>
                 </div>
                 <button
                     on:click=move |_| { create.dispatch(CreateSharedPage {}); }
@@ -55,7 +55,7 @@ pub fn SharedPagesListPage() -> impl IntoView {
                             </div>
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">"Delete shared page?"</h3>
-                                <p class="text-xs text-slate-500 mt-1">"This action will delete the page for all members. This cannot be undone."</p>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">"This action will delete the page for all members. This cannot be undone."</p>
                             </div>
                         </div>
                         <div class="flex justify-end gap-2 pt-2">
@@ -83,7 +83,7 @@ pub fn SharedPagesListPage() -> impl IntoView {
                 </div>
             </Show>
 
-            <Suspense fallback=|| view! { <p class="mt-6 text-sm text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="mt-6 text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match pages.await {
                         Ok(list) if list.is_empty() => view! {
@@ -94,7 +94,7 @@ pub fn SharedPagesListPage() -> impl IntoView {
                                     </svg>
                                 </div>
                                 <h3 class="mt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">"No shared pages yet"</h3>
-                                <p class="mt-1 text-xs text-slate-500">"Create a page to collaborate with friends, teammates, or colleagues."</p>
+                                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">"Create a page to collaborate with friends, teammates, or colleagues."</p>
                                 <button
                                     on:click=move |_| { create.dispatch(CreateSharedPage {}); }
                                     class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
@@ -128,7 +128,7 @@ pub fn SharedPagesListPage() -> impl IntoView {
                                                 <span class={format!("text-[11px] font-medium px-2 py-0.5 rounded-md border {role_badge_cls}")}>
                                                     {page.my_role.as_str()}
                                                 </span>
-                                                <span class="text-xs text-slate-400 dark:text-slate-500">{page.updated_at.clone()}</span>
+                                                <span class="text-xs text-slate-500 dark:text-slate-400">{page.updated_at.clone()}</span>
                                                 {is_owner.then(|| view! {
                                                     <button
                                                         on:click=move |_| { confirm_delete_id.set(Some(id)); }

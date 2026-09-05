@@ -31,17 +31,17 @@ pub fn AdminInvitesPage() -> impl IntoView {
                 <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">"Create a new code"</h2>
                 <ActionForm action=create attr:class="mt-4 flex flex-wrap items-end gap-3">
                     <div>
-                        <label class="block text-xs text-slate-500">"Uses"</label>
+                        <label class="block text-xs text-slate-500 dark:text-slate-400">"Uses"</label>
                         <input type="number" name="uses_left" value="1" min="1"
                             class="mt-1 w-24 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-sm"/>
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-500">"Expires in (hours, optional)"</label>
+                        <label class="block text-xs text-slate-500 dark:text-slate-400">"Expires in (hours, optional)"</label>
                         <input type="number" name="expires_in_hours" min="1"
                             class="mt-1 w-40 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-sm"/>
                     </div>
                     <div class="flex-1 min-w-40">
-                        <label class="block text-xs text-slate-500">"Note (optional)"</label>
+                        <label class="block text-xs text-slate-500 dark:text-slate-400">"Note (optional)"</label>
                         <input type="text" name="note" placeholder="e.g. design team"
                             class="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-sm"/>
                     </div>
@@ -56,11 +56,11 @@ pub fn AdminInvitesPage() -> impl IntoView {
                 </Show>
             </div>
 
-            <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match invites.await {
                         Ok(list) if list.is_empty() => view! {
-                            <p class="text-sm text-slate-500">"No invite codes yet."</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">"No invite codes yet."</p>
                         }.into_any(),
                         Ok(list) => view! {
                             <ul class="divide-y divide-slate-200 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">

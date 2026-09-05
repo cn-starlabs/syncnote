@@ -13,7 +13,7 @@ pub fn AccountPage() -> impl IntoView {
     view! {
         <div class="max-w-md mx-auto space-y-8">
             <h1 class="text-xl font-semibold text-slate-900 dark:text-slate-100">"Account"</h1>
-            <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match auth.user.await {
                         Ok(Some(user)) => view! {
@@ -56,7 +56,7 @@ fn AccountForms(email: String, display_name: String) -> impl IntoView {
 
     view! {
         <div class="space-y-8">
-            <p class="text-sm text-slate-500">{email}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
 
             <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-800 p-6">
                 <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">"Display name"</h2>
@@ -156,15 +156,15 @@ fn PasskeysCard() -> impl IntoView {
     view! {
         <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-800 p-6">
             <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">"Passkeys"</h2>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 "Sign in without a password using your device's fingerprint, face, or a security key."
             </p>
 
-            <Suspense fallback=|| view! { <p class="mt-3 text-xs text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match passkeys.await {
                         Ok(list) if list.is_empty() => view! {
-                            <p class="mt-3 text-xs text-slate-500">"No passkeys yet."</p>
+                            <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">"No passkeys yet."</p>
                         }.into_any(),
                         Ok(list) => view! {
                             <ul class="mt-3 space-y-1 text-sm">

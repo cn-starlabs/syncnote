@@ -22,7 +22,7 @@ pub fn JoinInvitePage() -> impl IntoView {
 
     view! {
         <div class="max-w-md mx-auto">
-            <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading invite…"</p> }>
+            <Suspense fallback=|| view! { <p class="text-sm text-slate-500 dark:text-slate-400">"Loading invite…"</p> }>
                 {move || Suspend::new(async move {
                     match preview.await {
                         Ok(p) => view! {
@@ -30,7 +30,7 @@ pub fn JoinInvitePage() -> impl IntoView {
                                 <h1 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
                                     "You've been invited to \""{p.page_title}"\""
                                 </h1>
-                                <p class="mt-1 text-sm text-slate-500">"Access level: "{p.role}</p>
+                                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">"Access level: "{p.role}</p>
 
                                 <Suspense fallback=|| ()>
                                     {move || Suspend::new(async move {

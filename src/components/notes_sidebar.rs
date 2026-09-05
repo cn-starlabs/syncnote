@@ -76,7 +76,7 @@ pub fn NotesSidebar(
                     <Show when=move || !search_query.get().is_empty()>
                         <button
                             on:click=move |_| search_query.set(String::new())
-                            class="absolute right-2 top-1.5 text-xs text-slate-400 hover:text-slate-600"
+                            class="absolute right-2 top-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                         >
                             "×"
                         </button>
@@ -100,7 +100,7 @@ pub fn NotesSidebar(
 
                         if visible.is_empty() {
                             view! {
-                                <p class="text-xs text-slate-400 text-center py-6">
+                                <p class="text-xs text-slate-500 dark:text-slate-400 text-center py-6">
                                     {if search_query.get().is_empty() {
                                         "No notes yet."
                                     } else {
@@ -139,7 +139,7 @@ pub fn NotesSidebar(
                                                     }
                                                 >
                                                     <span class="truncate font-medium">{title}</span>
-                                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{note.updated_at}</span>
+                                                    <span class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{note.updated_at}</span>
                                                 </A>
                                             </li>
                                         }

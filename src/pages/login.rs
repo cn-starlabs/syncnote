@@ -88,7 +88,7 @@ pub fn LoginPage() -> impl IntoView {
                             view! {
                                 <div>
                                     <h1 class="text-xl font-semibold text-slate-900 dark:text-slate-100">"Sign in"</h1>
-                                    <p class="mt-1 text-sm text-slate-500">"Use your email and password."</p>
+                                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">"Use your email and password."</p>
 
                                     <ActionForm action=action attr:class="mt-6 space-y-4">
                                         <div>
@@ -139,7 +139,7 @@ pub fn LoginPage() -> impl IntoView {
                                         </Show>
                                     </div>
 
-                                    <p class="mt-4 text-xs text-slate-500 text-center">
+                                    <p class="mt-4 text-xs text-slate-500 dark:text-slate-400 text-center">
                                         "No account? "
                                         <A href="/register" attr:class="text-brand-600 hover:underline">"Sign up"</A>
                                     </p>
@@ -150,7 +150,7 @@ pub fn LoginPage() -> impl IntoView {
                 >
                     <div>
                         <h1 class="text-xl font-semibold text-slate-900 dark:text-slate-100">"Reset password"</h1>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                             "Enter your account email and we'll send you a temporary password."
                         </p>
 

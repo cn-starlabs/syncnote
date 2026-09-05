@@ -53,7 +53,7 @@ pub fn NoteEditorPage() -> impl IntoView {
 
             // Main note editor area
             <div class="flex-1 min-w-0 w-full">
-                <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
+                <Suspense fallback=|| view! { <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                     {move || Suspend::new(async move {
                         match note.await {
                             Ok(n) => view! { <NoteEditor note=n on_saved=Callback::new(move |_| sidebar_refresh_tick.update(|t| *t = t.wrapping_add(1)))/> }.into_any(),
@@ -160,7 +160,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                     placeholder="Note subject / title…"
                     class="flex-1 text-xl font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 rounded-lg px-3.5 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                 />
-                <span class="text-xs font-medium text-slate-400 dark:text-slate-500 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
                     {move || if saved.get() { "Saved" } else { "Saving…" }}
                 </span>
             </div>
@@ -261,7 +261,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
 
                 // View Mode Toggles & Word Count
                 <div class="flex items-center gap-3">
-                    <span class="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
+                    <span class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">
                         {stats}
                     </span>
 
@@ -344,7 +344,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         }
                         class="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm text-slate-700 dark:text-slate-200 transition"
                     >
-                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
                         "Send via email"
@@ -365,7 +365,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         </h3>
                         <button
                             on:click=move |_| email_modal_open.set(false)
-                            class="text-xs text-slate-400 hover:text-slate-600"
+                            class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                         >
                             "✕"
                         </button>

@@ -145,6 +145,31 @@ pub async fn set_user_locked(user_id: i64, locked: bool) -> Result<(), ServerFnE
     Ok(())
 }
 
+#[server(endpoint = "admin/users/set-admin")]
+pub async fn set_user_admin(user_id: i64, is_admin: bool) -> Result<(), ServerFnError> {
+    use crate::auth::session as sess;
+    use crate::server_ctx::AppPool;
+    use axum::extract::Extension;
+    use tower_sessions::Session;
+
+    let Extension(AppPool(pool)) = leptos_axum::extract::<Extension<AppPool>>().await?;
+    let session: Session = leptos_axum::extract().await?;
+    let admin = sess::require_admin(&session, &pool).await?;
+
+    if user_id == admin.id && !is_admin {
+        return Err(srv("user", "cannot remove your own admin rights"));
+    }
+
+    sqlx::query("UPDATE users SET is_admin = ? WHERE id = ?")
+        .bind(is_admin)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+
+    Ok(())
+}
+
 #[server(endpoint = "admin/users/delete")]
 pub async fn delete_user(user_id: i64) -> Result<(), ServerFnError> {
     use crate::auth::session as sess;

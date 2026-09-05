@@ -24,13 +24,14 @@ pub fn DashboardPage() -> impl IntoView {
     });
 
     let confirm_delete_id = RwSignal::new(Option::<i64>::None);
+    let search_query = RwSignal::new(String::new());
 
     view! {
         <div>
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">"My notes"</h1>
-                    <p class="text-xs text-slate-500 mt-0.5">"All your private notes in one place"</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">"All your private notes in one place"</p>
                 </div>
                 <button
                     on:click=move |_| { create.dispatch(CreateNote {}); }
@@ -55,7 +56,7 @@ pub fn DashboardPage() -> impl IntoView {
                             </div>
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">"Delete note?"</h3>
-                                <p class="text-xs text-slate-500 mt-1">"This action will permanently delete this note. You cannot undo this."</p>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">"This action will permanently delete this note. You cannot undo this."</p>
                             </div>
                         </div>
                         <div class="flex justify-end gap-2 pt-2">
@@ -83,7 +84,7 @@ pub fn DashboardPage() -> impl IntoView {
                 </div>
             </Show>
 
-            <Suspense fallback=|| view! { <p class="mt-6 text-sm text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="mt-6 text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match notes.await {
                         Ok(list) if list.is_empty() => view! {
@@ -94,7 +95,7 @@ pub fn DashboardPage() -> impl IntoView {
                                     </svg>
                                 </div>
                                 <h3 class="mt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">"No notes yet"</h3>
-                                <p class="mt-1 text-xs text-slate-500">"Get started by creating your first note or document."</p>
+                                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">"Get started by creating your first note or document."</p>
                                 <button
                                     on:click=move |_| { create.dispatch(CreateNote {}); }
                                     class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
@@ -103,38 +104,85 @@ pub fn DashboardPage() -> impl IntoView {
                                 </button>
                             </div>
                         }.into_any(),
-                        Ok(list) => view! {
-                            <ul class="mt-6 divide-y divide-slate-200 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-                                {list.into_iter().map(|note| {
-                                    let id = note.id;
-                                    let title = if note.title.trim().is_empty() {
-                                        "Untitled note".to_string()
-                                    } else {
-                                        note.title.clone()
-                                    };
-                                    view! {
-                                        <li class="flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                                            <A href=format!("/app/note/{id}") attr:class="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
-                                                {title}
-                                            </A>
-                                            <div class="flex items-center gap-3">
-                                                <span class="text-xs text-slate-400 dark:text-slate-500">{note.updated_at.clone()}</span>
-                                                <button
-                                                    on:click=move |_| { confirm_delete_id.set(Some(id)); }
-                                                    class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
-                                                    title="Delete note"
-                                                >
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                    "Delete"
-                                                </button>
-                                            </div>
-                                        </li>
-                                    }
-                                }).collect_view()}
-                            </ul>
-                        }.into_any(),
+                        Ok(list) => {
+                            let all_notes = RwSignal::new(list);
+                            // Plain `let` closures outside the view! macro: writing the
+                            // filter+collect inline as `each=move || ... .collect::<Vec<_>>()`
+                            // puts a turbofish (`<Vec<_>>`) inside a component prop, which the
+                            // macro's HTML-like tag parser misreads as tag syntax.
+                            let filtered_notes = move || {
+                                let q = search_query.get().trim().to_lowercase();
+                                all_notes
+                                    .get()
+                                    .into_iter()
+                                    .filter(move |n| {
+                                        q.is_empty() || n.title.to_lowercase().contains(&q) || n.body.to_lowercase().contains(&q)
+                                    })
+                                    .collect::<Vec<_>>()
+                            };
+                            let has_results = move || {
+                                let q = search_query.get().trim().to_lowercase();
+                                q.is_empty()
+                                    || all_notes
+                                        .get()
+                                        .iter()
+                                        .any(|n| n.title.to_lowercase().contains(&q) || n.body.to_lowercase().contains(&q))
+                            };
+                            view! {
+                                <div class="mt-4 relative">
+                                    <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search notes by title or content…"
+                                        prop:value=move || search_query.get()
+                                        on:input=move |ev| search_query.set(event_target_value(&ev))
+                                        class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
+                                    />
+                                </div>
+
+                                <Show
+                                    when=has_results
+                                    fallback=|| view! { <p class="mt-6 text-sm text-slate-500 dark:text-slate-400 text-center">"No notes match your search."</p> }
+                                >
+                                    <ul class="mt-6 divide-y divide-slate-200 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                                        <For
+                                            each=filtered_notes
+                                            key=|n| n.id
+                                            children=move |note| {
+                                                let id = note.id;
+                                                let title = if note.title.trim().is_empty() {
+                                                    "Untitled note".to_string()
+                                                } else {
+                                                    note.title.clone()
+                                                };
+                                                view! {
+                                                    <li class="flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                                                        <A href=format!("/app/note/{id}") attr:class="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
+                                                            {title}
+                                                        </A>
+                                                        <div class="flex items-center gap-3">
+                                                            <span class="text-xs text-slate-500 dark:text-slate-400">{note.updated_at.clone()}</span>
+                                                            <button
+                                                                on:click=move |_| { confirm_delete_id.set(Some(id)); }
+                                                                class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                                                                title="Delete note"
+                                                            >
+                                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                                "Delete"
+                                                            </button>
+                                                        </div>
+                                                    </li>
+                                                }
+                                            }
+                                        />
+                                    </ul>
+                                </Show>
+                            }.into_any()
+                        }
                         Err(_) => view! { <p class="mt-6 text-sm text-rose-500">"Failed to load notes."</p> }.into_any(),
                     }
                 })}

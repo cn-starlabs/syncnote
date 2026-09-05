@@ -1,8 +1,26 @@
 use leptos::prelude::*;
-use leptos_router::components::A;
+use leptos_router::components::{Redirect, A};
+
+use crate::auth::use_auth;
 
 #[component]
 pub fn HomePage() -> impl IntoView {
+    let auth = use_auth();
+
+    view! {
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                match auth.user.await {
+                    Ok(Some(_)) => view! { <Redirect path="/app"/> }.into_any(),
+                    _ => view! { <LandingContent/> }.into_any(),
+                }
+            })}
+        </Suspense>
+    }
+}
+
+#[component]
+fn LandingContent() -> impl IntoView {
     view! {
         <div class="max-w-2xl mx-auto text-center py-16">
             <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-slate-100">"SyncNote"</h1>

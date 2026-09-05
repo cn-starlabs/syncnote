@@ -2,7 +2,7 @@ use leptos::prelude::*;
 
 use crate::components::admin_tabs::AdminTabs;
 use crate::server::admin_user_fns::{
-    list_users, AdminCreateUser, AdminResetPassword, DeleteUser, SetUserLocked,
+    list_users, AdminCreateUser, AdminResetPassword, DeleteUser, SetUserAdmin, SetUserLocked,
 };
 
 #[component]
@@ -11,6 +11,7 @@ pub fn AdminUsersPage() -> impl IntoView {
     let create_user = ServerAction::<AdminCreateUser>::new();
     let reset_password = ServerAction::<AdminResetPassword>::new();
     let set_locked = ServerAction::<SetUserLocked>::new();
+    let set_admin = ServerAction::<SetUserAdmin>::new();
     let delete_user = ServerAction::<DeleteUser>::new();
     let confirming_delete = RwSignal::new(Option::<i64>::None);
     let action_error = RwSignal::new(Option::<String>::None);
@@ -45,6 +46,17 @@ pub fn AdminUsersPage() -> impl IntoView {
         if let Some(result) = set_locked.value().get() {
             match result {
                 Ok(()) => users.refetch(),
+                Err(e) => action_error.set(Some(e.to_string())),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = set_admin.value().get() {
+            match result {
+                Ok(()) => {
+                    action_error.set(None);
+                    users.refetch();
+                }
                 Err(e) => action_error.set(Some(e.to_string())),
             }
         }
@@ -205,13 +217,13 @@ pub fn AdminUsersPage() -> impl IntoView {
                 </div>
             </Show>
 
-            <Suspense fallback=|| view! { <p class="text-sm text-slate-500">"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p> }>
                 {move || Suspend::new(async move {
                     match users.await {
                         Ok(list) => view! {
                             <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                                 <table class="min-w-full text-sm">
-                                    <thead class="text-left text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                                    <thead class="text-left text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                                         <tr>
                                             <th class="px-4 py-2">"Email"</th>
                                             <th class="px-4 py-2">"Name"</th>
@@ -225,11 +237,12 @@ pub fn AdminUsersPage() -> impl IntoView {
                                         {list.into_iter().map(|u| {
                                             let id = u.id;
                                             let is_locked = u.locked;
+                                            let is_admin_row = u.is_admin;
                                             view! {
                                                 <tr>
                                                     <td class="px-4 py-2">{u.email.clone()}</td>
-                                                    <td class="px-4 py-2 text-slate-500">{u.display_name.clone().unwrap_or_default()}</td>
-                                                    <td class="px-4 py-2 text-slate-500">{if u.is_admin { "admin" } else { "user" }}</td>
+                                                    <td class="px-4 py-2 text-slate-500 dark:text-slate-400">{u.display_name.clone().unwrap_or_default()}</td>
+                                                    <td class="px-4 py-2 text-slate-500 dark:text-slate-400">{if u.is_admin { "admin" } else { "user" }}</td>
                                                     <td class="px-4 py-2">
                                                         {if is_locked {
                                                             view! { <span class="text-rose-600">"Locked"</span> }.into_any()
@@ -252,9 +265,15 @@ pub fn AdminUsersPage() -> impl IntoView {
                                                             >
                                                                 {if is_locked { "Unlock" } else { "Lock" }}
                                                             </button>
+                                                            <button
+                                                                on:click=move |_| { action_error.set(None); set_admin.dispatch(SetUserAdmin { user_id: id, is_admin: !is_admin_row }); }
+                                                                class="text-indigo-600 hover:underline"
+                                                            >
+                                                                {if is_admin_row { "Remove admin" } else { "Make admin" }}
+                                                            </button>
                                                             {move || if confirming_delete.get() == Some(id) {
                                                                 view! {
-                                                                    <span class="text-slate-500">"Delete permanently?"</span>
+                                                                    <span class="text-slate-500 dark:text-slate-400">"Delete permanently?"</span>
                                                                     <button
                                                                         on:click=move |_| { action_error.set(None); delete_user.dispatch(DeleteUser { user_id: id }); }
                                                                         class="text-rose-600 font-semibold hover:underline"

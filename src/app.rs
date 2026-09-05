@@ -22,7 +22,7 @@ use crate::pages::shared_pages_list::SharedPagesListPage;
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
-        <html lang="en" class="h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
+        <html lang="en" class="h-full bg-slate-50 dark:bg-slate-950 antialiased">
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -61,7 +61,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <HashedStylesheet id="leptos" options=options />
                 <MetaTags/>
             </head>
-            <body class="h-full bg-slate-50 dark:bg-slate-950">
+            <body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
                 <App/>
             </body>
         </html>

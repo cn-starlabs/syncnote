@@ -243,3 +243,70 @@ pub async fn remove_member(page_id: i64, user_id: i64) -> Result<(), ServerFnErr
 
     Ok(())
 }
+
+/// Adds an existing user directly as a member by email — for when the other
+/// person already has an account, so there's no need to generate and send an
+/// invite link. `role` must be "editor" or "viewer".
+#[server(endpoint = "pages/add-member")]
+pub async fn add_member_by_email(page_id: i64, email: String, role: String) -> Result<SharedPageMember, ServerFnError> {
+    use crate::auth::session as sess;
+    use crate::server_ctx::AppPool;
+    use axum::extract::Extension;
+    use tower_sessions::Session;
+
+    if role != "editor" && role != "viewer" {
+        return Err(srv("role", "must be editor or viewer"));
+    }
+
+    let Extension(AppPool(pool)) = leptos_axum::extract::<Extension<AppPool>>().await?;
+    let session: Session = leptos_axum::extract().await?;
+    let user = sess::require_user(&session, &pool).await?;
+
+    let is_owner: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM shared_pages WHERE id = ? AND owner_id = ?")
+        .bind(page_id)
+        .bind(user.id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+    if is_owner.is_none() {
+        return Err(srv("auth", "only the owner can add members"));
+    }
+
+    let email = email.trim().to_lowercase();
+    let target: Option<(i64,)> = sqlx::query_as("SELECT id FROM users WHERE email = ?")
+        .bind(&email)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+    let Some((target_id,)) = target else {
+        return Err(srv("user", "no account with that email"));
+    };
+
+    if target_id == user.id {
+        return Err(srv("user", "you already own this page"));
+    }
+
+    let existing: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM shared_page_members WHERE page_id = ? AND user_id = ?")
+        .bind(page_id)
+        .bind(target_id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+    if existing.is_some() {
+        return Err(srv("user", "already a member of this page"));
+    }
+
+    sqlx::query("INSERT INTO shared_page_members (page_id, user_id, role) VALUES (?, ?, ?)")
+        .bind(page_id)
+        .bind(target_id)
+        .bind(&role)
+        .execute(&pool)
+        .await
+        .map_err(|e| srv("db", e))?;
+
+    Ok(SharedPageMember {
+        user_id: target_id,
+        email,
+        role: parse_role(&role)?,
+    })
+}
