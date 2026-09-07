@@ -28,6 +28,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="description" content="SyncNote — personal notes and live-collaborative shared pages"/>
+                <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
                 <script>"(function(){try{if(localStorage.getItem('dark-mode')==='true'){document.documentElement.classList.add('dark');}}catch(e){}})();"</script>
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous"/>
                 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>

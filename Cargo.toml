@@ -127,7 +127,7 @@ strip = true
 debug = false
 debug-assertions = false
 overflow-checks = false
-incremental = true
+incremental = false
 
 [package.metadata.leptos]
 output-name = "syncnote"

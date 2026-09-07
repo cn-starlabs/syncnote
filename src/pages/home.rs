@@ -23,6 +23,9 @@ pub fn HomePage() -> impl IntoView {
 fn LandingContent() -> impl IntoView {
     view! {
         <div class="max-w-2xl mx-auto text-center py-16">
+            <div class="flex justify-center mb-6">
+                <img src="/icon.svg" alt="SyncNote Logo" class="w-20 h-20 drop-shadow-md" />
+            </div>
             <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-slate-100">"SyncNote"</h1>
             <p class="mt-4 text-slate-600 dark:text-slate-400">
                 "Personal notes that stay yours, and shared pages you can edit together in real time."
