@@ -71,6 +71,7 @@ web-sys = { version = "0.3", optional = true, features = [
     "DomException",
     "Storage",
     "Document",
+    "HtmlDocument",
     "Element",
     "DomTokenList",
 ] }

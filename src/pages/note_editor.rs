@@ -2,14 +2,18 @@ use std::time::Duration;
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_navigate, use_params_map};
 
 use crate::client_upload::upload_from_change_event;
-use crate::components::markdown::MarkdownPreview;
+use crate::components::markdown::{render_markdown, MarkdownPreview};
 use crate::components::notes_sidebar::NotesSidebar;
 use crate::models::{AttachmentInfo, Note};
 use crate::server::attachment_fns::list_library_attachments;
-use crate::server::note_fns::{get_note, SaveNote, SendNoteViaEmail};
+use crate::server::note_fns::{get_note, DeleteNote, SaveNote, SendNoteViaEmail};
+use crate::server::note_share_fns::{
+    create_note_share_link, get_note_share_token, list_note_user_shares, revoke_note_share_link,
+    share_note_with_user, unshare_note_from_user,
+};
 
 #[component]
 pub fn NoteEditorPage() -> impl IntoView {
@@ -71,6 +75,7 @@ pub fn NoteEditorPage() -> impl IntoView {
 #[component]
 fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> impl IntoView {
     let id = note.id;
+    let updated_at = note.updated_at.clone();
     let title = RwSignal::new(note.title);
     let body = RwSignal::new(note.body);
     let save = ServerAction::<SaveNote>::new();
@@ -81,20 +86,99 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let library_files = RwSignal::new(Option::<Vec<AttachmentInfo>>::None);
     let library_error = RwSignal::new(Option::<String>::None);
 
-    let toggle_library = move |_| {
-        let now_open = !library_open.get_untracked();
-        library_open.set(now_open);
-        if now_open && library_files.get_untracked().is_none() {
-            library_error.set(None);
+    // ── Delete ──────────────────────────────────────────────────────────────
+    let delete_action = ServerAction::<DeleteNote>::new();
+    let confirm_delete = RwSignal::new(false);
+    let navigate = use_navigate();
+
+    Effect::new(move |_| {
+        if let Some(Ok(())) = delete_action.value().get() {
+            navigate("/app", Default::default());
+        }
+    });
+
+    // ── Share link ───────────────────────────────────────────────────────────
+    let share_modal_open = RwSignal::new(false);
+    let share_token: RwSignal<Option<String>> = RwSignal::new(None);
+    let share_users: RwSignal<Vec<crate::models::NoteShareInfo>> = RwSignal::new(vec![]);
+    let share_loading = RwSignal::new(false);
+    let share_error = RwSignal::new(Option::<String>::None);
+    let share_copied = RwSignal::new(false);
+    let share_email_input = RwSignal::new(String::new());
+    let share_email_error = RwSignal::new(Option::<String>::None);
+    let share_email_pending = RwSignal::new(false);
+    let share_new_password = RwSignal::new(String::new()); // optional password when creating a link
+
+    // Load existing share token + shared users when share modal opens
+    let open_share_modal = move |_| {
+        share_error.set(None);
+        share_modal_open.set(true);
+        if share_token.get_untracked().is_none() && !share_loading.get_untracked() {
+            share_loading.set(true);
             spawn_local(async move {
-                match list_library_attachments().await {
-                    Ok(files) => library_files.set(Some(files)),
-                    Err(e) => library_error.set(Some(e.to_string())),
+                let token_res = get_note_share_token(id).await;
+                let users_res = list_note_user_shares(id).await;
+                match token_res {
+                    Ok(t) => share_token.set(t),
+                    Err(e) => share_error.set(Some(e.to_string())),
                 }
+                if let Ok(u) = users_res {
+                    share_users.set(u);
+                }
+                share_loading.set(false);
             });
         }
     };
 
+    let create_share_link = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let pw = share_new_password.get_untracked();
+        let password = if pw.trim().is_empty() { None } else { Some(pw) };
+        share_error.set(None);
+        share_loading.set(true);
+        spawn_local(async move {
+            match create_note_share_link(id, password).await {
+                Ok(token) => {
+                    share_token.set(Some(token));
+                    share_new_password.set(String::new());
+                }
+                Err(e) => share_error.set(Some(e.to_string())),
+            }
+            share_loading.set(false);
+        });
+    };
+
+    let revoke_share = move |_| {
+        share_error.set(None);
+        share_loading.set(true);
+        spawn_local(async move {
+            match revoke_note_share_link(id).await {
+                Ok(()) => share_token.set(None),
+                Err(e) => share_error.set(Some(e.to_string())),
+            }
+            share_loading.set(false);
+        });
+    };
+
+    let copy_share_link = move |_| {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            #[wasm_bindgen]
+            extern "C" {
+                #[wasm_bindgen(js_namespace = ["window", "navigator", "clipboard"], js_name = writeText)]
+                fn clipboard_write(s: &str);
+            }
+            if let Some(token) = share_token.get_untracked() {
+                let url = format!("{}/note/shared/{}", web_sys::window().unwrap().location().origin().unwrap_or_default(), token);
+                clipboard_write(&url);
+                share_copied.set(true);
+                set_timeout(move || share_copied.set(false), Duration::from_secs(2));
+            }
+        }
+    };
+
+    // ── Email ────────────────────────────────────────────────────────────────
     let send_mail_action = ServerAction::<SendNoteViaEmail>::new();
     let email_modal_open = RwSignal::new(false);
     let recipient_email = RwSignal::new(String::new());
@@ -164,6 +248,94 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
         let words = text.split_whitespace().count();
         let chars = text.chars().count();
         format!("{words} words · {chars} chars")
+    };
+
+    // ── PDF export: render the note's Markdown (incl. math) into a standalone
+    // print document opened in a new window, then trigger that window's print
+    // dialog. This renders the actual note content instead of whatever the
+    // main app page happens to look like. ───────────────────────────────────
+    let export_pdf = move |_| {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::JsCast;
+
+            fn escape_html(s: &str) -> String {
+                s.replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
+            }
+
+            let content_html = render_markdown(&body.get_untracked());
+            let doc_title = escape_html(&title.get_untracked());
+            let doc_updated = escape_html(&updated_at);
+
+            let full_html = format!(
+                r#"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{doc_title}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<style>
+  body {{ font-family: -apple-system, "Segoe UI", Inter, sans-serif; color: #0f172a; padding: 1.5cm 2cm; line-height: 1.6; }}
+  h1.note-title {{ font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }}
+  p.note-meta {{ font-size: 0.75rem; color: #64748b; margin-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; }}
+  .prose-note h1 {{ font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }}
+  .prose-note h2 {{ font-size: 1.25rem; font-weight: 700; margin: 1rem 0 0.5rem; }}
+  .prose-note h3 {{ font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }}
+  .prose-note p {{ margin: 0.5rem 0; }}
+  .prose-note ul {{ list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }}
+  .prose-note ol {{ list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }}
+  .prose-note li {{ margin: 0.25rem 0; }}
+  .prose-note a {{ color: #1d4ed8; text-decoration: underline; }}
+  .prose-note code {{ background: #f1f5f9; border-radius: 0.25rem; padding: 0.1rem 0.3rem; font-family: monospace; font-size: 0.9em; }}
+  .prose-note pre {{ background: #f1f5f9; border-radius: 0.5rem; padding: 0.75rem; overflow-x: auto; margin: 0.5rem 0; }}
+  .prose-note pre code {{ background: transparent; padding: 0; }}
+  .prose-note blockquote {{ border-left: 4px solid #cbd5e1; padding-left: 0.75rem; color: #475569; font-style: italic; margin: 0.5rem 0; }}
+  .prose-note table {{ width: 100%; border-collapse: collapse; margin: 0.75rem 0; }}
+  .prose-note th, .prose-note td {{ border: 1px solid #cbd5e1; padding: 0.375rem 0.75rem; text-align: left; font-size: 0.9rem; }}
+  .prose-note th {{ background: #f1f5f9; font-weight: 600; }}
+  .prose-note hr {{ border-color: #e2e8f0; margin: 1rem 0; }}
+  .prose-note img {{ max-width: 100%; border-radius: 0.25rem; margin: 0.5rem 0; }}
+  @media print {{ body {{ padding: 0; }} }}
+</style>
+</head>
+<body>
+<h1 class="note-title">{doc_title}</h1>
+<p class="note-meta">Last updated: {doc_updated}</p>
+<div class="prose-note">{content_html}</div>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script>
+  window.onload = function() {{
+    if (typeof katex !== 'undefined') {{
+      document.querySelectorAll('.katex-math-inline').forEach(function(el) {{
+        var expr = el.getAttribute('data-expr');
+        if (expr) {{ try {{ katex.render(expr, el, {{ throwOnError: false, displayMode: false }}); }} catch (e) {{}} }}
+      }});
+      document.querySelectorAll('.katex-math-block').forEach(function(el) {{
+        var expr = el.getAttribute('data-expr');
+        if (expr) {{ try {{ katex.render(expr, el, {{ throwOnError: false, displayMode: true }}); }} catch (e) {{}} }}
+      }});
+    }}
+    setTimeout(function() {{ window.print(); }}, 80);
+  }};
+</script>
+</body>
+</html>"#
+            );
+
+            if let Some(win) = web_sys::window() {
+                if let Ok(Some(print_win)) = win.open_with_url_and_target("about:blank", "_blank") {
+                    if let Some(doc) = print_win.document() {
+                        if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
+                            let _ = html_doc.open();
+                            let _ = html_doc.write_1(&full_html);
+                            let _ = html_doc.close();
+                        }
+                    }
+                }
+            }
+        }
     };
 
     view! {
@@ -328,8 +500,11 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                 </div>
             </div>
 
+            // ── Toolbar: attach / library / share / email / PDF / delete ─────
             <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+
+                    // Attach file
                     <label class="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm transition">
                         "Attach file"
                         <input
@@ -355,10 +530,65 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         />
                     </label>
 
+                    // Delete button (next to Attach file)
+                    <Show
+                        when=move || !confirm_delete.get()
+                        fallback=move || view! {
+                            <div class="inline-flex items-center gap-1.5">
+                                <span class="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                    "Delete this note?"
+                                </span>
+                                <button
+                                    type="button"
+                                    on:click=move |_| {
+                                        delete_action.dispatch(DeleteNote { id });
+                                    }
+                                    disabled=move || delete_action.pending().get()
+                                    class="text-xs rounded-md border border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 px-2.5 py-1.5 hover:bg-rose-100 dark:hover:bg-rose-900/40 disabled:opacity-60 transition"
+                                >
+                                    {move || if delete_action.pending().get() { "Deleting…" } else { "Yes, delete" }}
+                                </button>
+                                <button
+                                    type="button"
+                                    on:click=move |_| confirm_delete.set(false)
+                                    class="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                                >
+                                    "Cancel"
+                                </button>
+                            </div>
+                        }
+                    >
+                        <button
+                            type="button"
+                            on:click=move |_| confirm_delete.set(true)
+                            title="Delete note"
+                            class="inline-flex items-center gap-1.5 text-xs rounded-md border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/30 shadow-sm text-rose-600 dark:text-rose-400 transition"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            "Delete"
+                        </button>
+                    </Show>
+
+                    // From library
                     <div class="relative">
                         <button
                             type="button"
-                            on:click=toggle_library
+                            on:click=move |_| {
+                                let now_open = !library_open.get_untracked();
+                                library_open.set(now_open);
+                                if now_open && library_files.get_untracked().is_none() {
+                                    library_error.set(None);
+                                    spawn_local(async move {
+                                        match list_library_attachments().await {
+                                            Ok(files) => library_files.set(Some(files)),
+                                            Err(e) => library_error.set(Some(e.to_string())),
+                                        }
+                                    });
+                                }
+                            }
                             class="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm transition"
                         >
                             "From library"
@@ -413,6 +643,20 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         </Show>
                     </div>
 
+                    // Share button
+                    <button
+                        type="button"
+                        on:click=open_share_modal
+                        class="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm text-slate-700 dark:text-slate-200 transition"
+                    >
+                        <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                        </svg>
+                        "Share"
+                    </button>
+
+                    // Send via email
                     <button
                         type="button"
                         on:click=move |_| {
@@ -426,6 +670,20 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         </svg>
                         "Send via email"
                     </button>
+
+                    // Export to PDF
+                    <button
+                        type="button"
+                        on:click=export_pdf
+                        title="Export to PDF (browser print)"
+                        class="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm text-slate-700 dark:text-slate-200 transition"
+                    >
+                        <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        "Export PDF"
+                    </button>
                 </div>
 
                 <Show when=move || upload_error.get().is_some()>
@@ -433,7 +691,195 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                 </Show>
             </div>
 
-            // Send via Email Dialog Box
+            // ── Share modal ──────────────────────────────────────────────────
+            <Show when=move || share_modal_open.get()>
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                            "Share note"
+                        </h3>
+                        <button
+                            on:click=move |_| share_modal_open.set(false)
+                            class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        >
+                            "✕"
+                        </button>
+                    </div>
+
+                    <Show when=move || share_error.get().is_some()>
+                        <p class="text-xs text-rose-500 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded p-2">
+                            {move || share_error.get().unwrap_or_default()}
+                        </p>
+                    </Show>
+
+                    // ── Public link ───────────────────────────────────────────
+                    <div class="space-y-2">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            "Public link"
+                        </p>
+                        {move || {
+                            if share_loading.get() {
+                                view! { <p class="text-xs text-slate-500 dark:text-slate-400">"Loading…"</p> }.into_any()
+                            } else if let Some(token) = share_token.get() {
+                                let share_url = format!("/note/shared/{token}");
+                                view! {
+                                    <div class="space-y-2">
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                                            "Anyone with this link can view a read-only copy."
+                                        </p>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                readonly
+                                                prop:value=share_url.clone()
+                                                class="flex-1 min-w-0 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-xs font-mono text-slate-700 dark:text-slate-300 focus:outline-none"
+                                            />
+                                            <button
+                                                type="button"
+                                                on:click=copy_share_link
+                                                class="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
+                                            >
+                                                {move || if share_copied.get() { "Copied!" } else { "Copy" }}
+                                            </button>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            <a href=share_url target="_blank" rel="external noopener"
+                                                class="text-xs text-brand-600 dark:text-brand-400 hover:underline">
+                                                "Open link ↗"
+                                            </a>
+                                            <button type="button" on:click=revoke_share
+                                                class="text-xs text-rose-500 dark:text-rose-400 hover:underline">
+                                                "Revoke link"
+                                            </button>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <form on:submit=create_share_link class="space-y-2">
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                                            "Create a public read-only link anyone can view."
+                                        </p>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="password"
+                                                placeholder="Protect with password (optional)"
+                                                prop:value=move || share_new_password.get()
+                                                on:input=move |ev| share_new_password.set(event_target_value(&ev))
+                                                class="flex-1 min-w-0 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-xs focus:border-brand-500 focus:outline-none"
+                                            />
+                                            <button type="submit"
+                                                disabled=move || share_loading.get()
+                                                class="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-60 transition">
+                                                {move || if share_loading.get() { "Creating…" } else { "Create share link" }}
+                                            </button>
+                                        </div>
+                                    </form>
+                                }.into_any()
+                            }
+                        }}
+                    </div>
+
+                    // Divider
+                    <div class="border-t border-slate-200 dark:border-slate-700"/>
+
+                    // ── Share with specific people ────────────────────────────
+                    <div class="space-y-2">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            "Share with people"
+                        </p>
+                        <form
+                            on:submit=move |ev| {
+                                ev.prevent_default();
+                                let email = share_email_input.get_untracked();
+                                if email.trim().is_empty() { return; }
+                                share_email_error.set(None);
+                                share_email_pending.set(true);
+                                spawn_local(async move {
+                                    match share_note_with_user(id, email).await {
+                                        Ok(info) => {
+                                            share_users.update(|v| v.push(info));
+                                            share_email_input.set(String::new());
+                                        }
+                                        Err(e) => share_email_error.set(Some(e.to_string())),
+                                    }
+                                    share_email_pending.set(false);
+                                });
+                            }
+                            class="flex items-center gap-2"
+                        >
+                            <input
+                                type="email"
+                                required
+                                placeholder="colleague@example.com"
+                                prop:value=move || share_email_input.get()
+                                on:input=move |ev| share_email_input.set(event_target_value(&ev))
+                                class="flex-1 min-w-0 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-xs focus:border-brand-500 focus:outline-none"
+                            />
+                            <button
+                                type="submit"
+                                disabled=move || share_email_pending.get()
+                                class="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-60 transition"
+                            >
+                                {move || if share_email_pending.get() { "Adding…" } else { "Add" }}
+                            </button>
+                        </form>
+
+                        <Show when=move || share_email_error.get().is_some()>
+                            <p class="text-xs text-rose-500">
+                                {move || share_email_error.get().unwrap_or_default()}
+                            </p>
+                        </Show>
+
+                        // List of shared users
+                        {move || {
+                            let users = share_users.get();
+                            if users.is_empty() {
+                                view! {
+                                    <p class="text-xs text-slate-400 dark:text-slate-500 italic">
+                                        "Not shared with anyone yet."
+                                    </p>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <ul class="space-y-1 mt-1">
+                                        <For
+                                            each=move || share_users.get()
+                                            key=|u| u.user_id
+                                            children=move |u| {
+                                                let uid = u.user_id;
+                                                view! {
+                                                    <li class="flex items-center justify-between rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-1.5">
+                                                        <span class="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                                            {u.email.clone()}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            on:click=move |_| {
+                                                                spawn_local(async move {
+                                                                    if unshare_note_from_user(id, uid).await.is_ok() {
+                                                                        share_users.update(|v| v.retain(|u| u.user_id != uid));
+                                                                    }
+                                                                });
+                                                            }
+                                                            class="ml-2 shrink-0 text-xs text-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
+                                                            title="Remove access"
+                                                        >
+                                                            "✕"
+                                                        </button>
+                                                    </li>
+                                                }
+                                            }
+                                        />
+                                    </ul>
+                                }.into_any()
+                            }
+                        }}
+                    </div>
+                </div>
+            </Show>
+
+            // ── Send via Email modal ─────────────────────────────────────────
             <Show when=move || email_modal_open.get()>
                 <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-3">
                     <div class="flex items-center justify-between">
@@ -508,7 +954,10 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                     ></textarea>
                 </Show>
                 <Show when=move || view_mode.get() != "edit">
-                    <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[550px]">
+                    <div
+                        id="note-print-area"
+                        class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-4 overflow-auto min-h-[550px]"
+                    >
                         <MarkdownPreview body=Signal::derive(move || body.get())/>
                     </div>
                 </Show>

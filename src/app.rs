@@ -17,6 +17,8 @@ use crate::pages::login::LoginPage;
 use crate::pages::not_found::NotFound;
 use crate::pages::note_editor::NoteEditorPage;
 use crate::pages::register::RegisterPage;
+use crate::pages::shared_note_view::SharedNoteViewPage;
+use crate::pages::shared_note_user_view::SharedNoteUserViewPage;
 use crate::pages::shared_page_editor::SharedPageEditorPage;
 use crate::pages::shared_pages_list::SharedPagesListPage;
 
@@ -84,9 +86,11 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/login") view=LoginPage/>
                     <Route path=path!("/register") view=RegisterPage/>
                     <Route path=path!("/join/:token") view=JoinInvitePage/>
+                    <Route path=path!("/note/shared/:token") view=SharedNoteViewPage/>
                     <ParentRoute path=path!("/app") view=AuthGate>
                         <Route path=path!("") view=DashboardPage/>
                         <Route path=path!("/note/:id") view=NoteEditorPage/>
+                        <Route path=path!("/note/shared-user/:id") view=SharedNoteUserViewPage/>
                         <Route path=path!("/shared") view=SharedPagesListPage/>
                         <Route path=path!("/shared/:id") view=SharedPageEditorPage/>
                         <Route path=path!("/account") view=AccountPage/>

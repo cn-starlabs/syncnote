@@ -43,6 +43,18 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             include_str!("../../migrations/0007_attachments_library_scope.sql"),
         ),
         ("0008_file_sharing", include_str!("../../migrations/0008_file_sharing.sql")),
+        (
+            "0009_note_share_links",
+            include_str!("../../migrations/0009_note_share_links.sql"),
+        ),
+        (
+            "0010_note_user_shares",
+            include_str!("../../migrations/0010_note_user_shares.sql"),
+        ),
+        (
+            "0011_note_share_password",
+            include_str!("../../migrations/0011_note_share_password.sql"),
+        ),
     ];
 
     for (name, sql) in migrations {

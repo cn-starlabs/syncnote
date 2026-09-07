@@ -8,6 +8,8 @@ pub mod join_invite;
 pub mod login;
 pub mod not_found;
 pub mod note_editor;
+pub mod shared_note_view;
+pub mod shared_note_user_view;
 pub mod register;
 pub mod shared_page_editor;
 pub mod shared_pages_list;

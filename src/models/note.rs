@@ -20,3 +20,10 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for Note {
         })
     }
 }
+
+/// A user a note has been directly shared with.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteShareInfo {
+    pub user_id: i64,
+    pub email: String,
+}

@@ -5,6 +5,7 @@ pub mod auth_fns;
 pub mod file_share_fns;
 pub mod invite_fns;
 pub mod note_fns;
+pub mod note_share_fns;
 pub mod passkey_fns;
 pub mod shared_page_fns;
 
