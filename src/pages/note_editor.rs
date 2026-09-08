@@ -257,7 +257,13 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let export_pdf = move |_| {
         #[cfg(feature = "hydrate")]
         {
-            use wasm_bindgen::JsCast;
+            use wasm_bindgen::prelude::*;
+
+            #[wasm_bindgen]
+            extern "C" {
+                #[wasm_bindgen(js_namespace = window, js_name = exportHtmlToPdf, catch)]
+                fn export_html_to_pdf(html: &str) -> Result<(), JsValue>;
+            }
 
             fn escape_html(s: &str) -> String {
                 s.replace('&', "&amp;")
@@ -265,75 +271,243 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                     .replace('>', "&gt;")
             }
 
-            let content_html = render_markdown(&body.get_untracked());
-            let doc_title = escape_html(&title.get_untracked());
+            let raw_title = title.get_untracked();
+            let raw_title = if raw_title.trim().is_empty() {
+                "Untitled Note"
+            } else {
+                raw_title.trim()
+            };
+            let doc_title = escape_html(raw_title);
             let doc_updated = escape_html(&updated_at);
+            let body_text = body.get_untracked();
+            let content_html = if body_text.trim().is_empty() {
+                "<p style=\"color: #94a3b8; font-style: italic;\">No content in this note.</p>".to_string()
+            } else {
+                render_markdown(&body_text)
+            };
+
+            let base_href = web_sys::window()
+                .and_then(|w| w.location().origin().ok())
+                .unwrap_or_default();
+            let base_tag = if !base_href.is_empty() {
+                format!("<base href=\"{base_href}/\">")
+            } else {
+                String::new()
+            };
 
             let full_html = format!(
                 r#"<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+{base_tag}
 <title>{doc_title}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <style>
-  body {{ font-family: -apple-system, "Segoe UI", Inter, sans-serif; color: #0f172a; padding: 1.5cm 2cm; line-height: 1.6; }}
-  h1.note-title {{ font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }}
-  p.note-meta {{ font-size: 0.75rem; color: #64748b; margin-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; }}
-  .prose-note h1 {{ font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }}
-  .prose-note h2 {{ font-size: 1.25rem; font-weight: 700; margin: 1rem 0 0.5rem; }}
-  .prose-note h3 {{ font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }}
-  .prose-note p {{ margin: 0.5rem 0; }}
-  .prose-note ul {{ list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }}
-  .prose-note ol {{ list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #0f172a;
+    background-color: #ffffff;
+    padding: 2cm;
+    line-height: 1.6;
+    margin: 0;
+  }}
+  .preview-bar {{
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 10px 20px;
+    margin: -2cm -2cm 1.5cm -2cm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    z-index: 100;
+  }}
+  .preview-title {{
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }}
+  .preview-actions {{
+    display: flex;
+    gap: 8px;
+  }}
+  .btn {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s;
+    text-decoration: none;
+  }}
+  .btn-primary {{
+    background: #4f46e5;
+    color: #ffffff;
+  }}
+  .btn-primary:hover {{
+    background: #4338ca;
+  }}
+  .btn-secondary {{
+    background: #e2e8f0;
+    color: #334155;
+  }}
+  .btn-secondary:hover {{
+    background: #cbd5e1;
+  }}
+  h1.note-title {{
+    font-size: 1.875rem;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 0.35rem;
+    color: #0f172a;
+  }}
+  p.note-meta {{
+    font-size: 0.8125rem;
+    color: #64748b;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.75rem;
+  }}
+  .prose-note h1 {{ font-size: 1.5rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: #0f172a; }}
+  .prose-note h2 {{ font-size: 1.25rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: #1e293b; }}
+  .prose-note h3 {{ font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.25rem; color: #334155; }}
+  .prose-note p {{ margin: 0.75rem 0; }}
+  .prose-note ul {{ list-style: disc; padding-left: 1.5rem; margin: 0.75rem 0; }}
+  .prose-note ol {{ list-style: decimal; padding-left: 1.5rem; margin: 0.75rem 0; }}
   .prose-note li {{ margin: 0.25rem 0; }}
-  .prose-note a {{ color: #1d4ed8; text-decoration: underline; }}
-  .prose-note code {{ background: #f1f5f9; border-radius: 0.25rem; padding: 0.1rem 0.3rem; font-family: monospace; font-size: 0.9em; }}
-  .prose-note pre {{ background: #f1f5f9; border-radius: 0.5rem; padding: 0.75rem; overflow-x: auto; margin: 0.5rem 0; }}
-  .prose-note pre code {{ background: transparent; padding: 0; }}
-  .prose-note blockquote {{ border-left: 4px solid #cbd5e1; padding-left: 0.75rem; color: #475569; font-style: italic; margin: 0.5rem 0; }}
-  .prose-note table {{ width: 100%; border-collapse: collapse; margin: 0.75rem 0; }}
-  .prose-note th, .prose-note td {{ border: 1px solid #cbd5e1; padding: 0.375rem 0.75rem; text-align: left; font-size: 0.9rem; }}
-  .prose-note th {{ background: #f1f5f9; font-weight: 600; }}
-  .prose-note hr {{ border-color: #e2e8f0; margin: 1rem 0; }}
-  .prose-note img {{ max-width: 100%; border-radius: 0.25rem; margin: 0.5rem 0; }}
-  @media print {{ body {{ padding: 0; }} }}
+  .prose-note a {{ color: #2563eb; text-decoration: underline; }}
+  .prose-note code {{ background: #f1f5f9; border-radius: 0.25rem; padding: 0.15rem 0.35rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.875em; }}
+  .prose-note pre {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }}
+  .prose-note pre code {{ background: transparent; padding: 0; font-size: 0.875rem; }}
+  .prose-note blockquote {{ border-left: 4px solid #cbd5e1; padding-left: 1rem; color: #475569; font-style: italic; margin: 0.75rem 0; }}
+  .prose-note table {{ width: 100%; border-collapse: collapse; margin: 1rem 0; }}
+  .prose-note th, .prose-note td {{ border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.875rem; }}
+  .prose-note th {{ background: #f8fafc; font-weight: 600; }}
+  .prose-note hr {{ border: none; border-top: 1px solid #e2e8f0; margin: 1.5rem 0; }}
+  .prose-note img {{ max-width: 100%; height: auto; border-radius: 0.375rem; margin: 0.75rem 0; }}
+  .katex-math-block {{ display: flex; justify-content: center; margin: 1rem 0; overflow-x: auto; }}
+  .katex-math-inline {{ display: inline-block; }}
+  @media print {{
+    body {{ padding: 0 !important; }}
+    .no-print {{ display: none !important; }}
+    h1, h2, h3 {{ page-break-after: avoid; }}
+    pre, blockquote, table, img {{ page-break-inside: avoid; }}
+  }}
 </style>
 </head>
 <body>
+<div class="preview-bar no-print">
+  <div class="preview-title">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+    </svg>
+    <span>SyncNote — PDF Export Preview</span>
+  </div>
+  <div class="preview-actions">
+    <button class="btn btn-primary" onclick="window.print()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+      </svg>
+      <span>Print / Save as PDF</span>
+    </button>
+    <button class="btn btn-secondary" onclick="window.close()">Close</button>
+  </div>
+</div>
 <h1 class="note-title">{doc_title}</h1>
 <p class="note-meta">Last updated: {doc_updated}</p>
 <div class="prose-note">{content_html}</div>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
 <script>
-  window.onload = function() {{
-    if (typeof katex !== 'undefined') {{
+  function renderMathAndPrint() {{
+    var k = (typeof katex !== 'undefined') ? katex : (window.opener && window.opener.katex ? window.opener.katex : null);
+    if (k) {{
       document.querySelectorAll('.katex-math-inline').forEach(function(el) {{
         var expr = el.getAttribute('data-expr');
-        if (expr) {{ try {{ katex.render(expr, el, {{ throwOnError: false, displayMode: false }}); }} catch (e) {{}} }}
+        if (expr) {{ try {{ k.render(expr, el, {{ throwOnError: false, displayMode: false }}); }} catch (e) {{}} }}
       }});
       document.querySelectorAll('.katex-math-block').forEach(function(el) {{
         var expr = el.getAttribute('data-expr');
-        if (expr) {{ try {{ katex.render(expr, el, {{ throwOnError: false, displayMode: true }}); }} catch (e) {{}} }}
+        if (expr) {{ try {{ k.render(expr, el, {{ throwOnError: false, displayMode: true }}); }} catch (e) {{}} }}
       }});
     }}
-    setTimeout(function() {{ window.print(); }}, 80);
-  }};
+    setTimeout(function() {{
+      window.focus();
+      window.print();
+    }}, 250);
+  }}
+  if (document.readyState === 'complete') {{
+    renderMathAndPrint();
+  }} else {{
+    window.addEventListener('load', renderMathAndPrint);
+  }}
 </script>
 </body>
 </html>"#
             );
 
-            if let Some(win) = web_sys::window() {
-                if let Ok(Some(print_win)) = win.open_with_url_and_target("about:blank", "_blank") {
-                    if let Some(doc) = print_win.document() {
-                        if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
-                            let _ = html_doc.open();
-                            let _ = html_doc.write_1(&full_html);
-                            let _ = html_doc.close();
+            // Safety guard: ensure window.exportHtmlToPdf is defined even on stale/cached shells
+            let _ = js_sys::eval(r#"
+                if (typeof window.exportHtmlToPdf !== 'function') {
+                    window.exportHtmlToPdf = function(fullHtml) {
+                        var printWin = null;
+                        try { printWin = window.open('', '_blank'); } catch(e) {}
+                        if (printWin && printWin.document) {
+                            try {
+                                printWin.document.open();
+                                printWin.document.write(fullHtml);
+                                printWin.document.close();
+                                return;
+                            } catch(e) {
+                                try { printWin.close(); } catch(_) {}
+                            }
                         }
-                    }
+                        try {
+                            var blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+                            var blobUrl = URL.createObjectURL(blob);
+                            var blobWin = window.open(blobUrl, '_blank');
+                            if (blobWin) {
+                                setTimeout(function() { try { URL.revokeObjectURL(blobUrl); } catch(_) {} }, 60000);
+                                return;
+                            }
+                        } catch(e) {}
+                        try {
+                            var frame = document.createElement('iframe');
+                            frame.style.position = 'fixed';
+                            frame.style.right = '100%';
+                            frame.style.bottom = '100%';
+                            frame.style.width = '0';
+                            frame.style.height = '0';
+                            frame.style.border = '0';
+                            document.body.appendChild(frame);
+                            var frameDoc = frame.contentWindow.document;
+                            frameDoc.open();
+                            frameDoc.write(fullHtml);
+                            frameDoc.close();
+                            setTimeout(function() {
+                                try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+                                finally { setTimeout(function() { try { document.body.removeChild(frame); } catch(_) {} }, 2000); }
+                            }, 300);
+                        } catch(e) {}
+                    };
                 }
+            "#);
+
+            if let Err(e) = export_html_to_pdf(&full_html) {
+                leptos::logging::warn!("export_html_to_pdf call failed: {e:?}");
             }
         }
     };

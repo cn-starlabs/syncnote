@@ -56,6 +56,64 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                             }\
                         });\
                     };\
+                    window.exportHtmlToPdf = function(fullHtml) {\
+                        var printWin = null;\
+                        try {\
+                            printWin = window.open('', '_blank');\
+                        } catch (e) {\
+                            console.warn('window.open failed:', e);\
+                        }\
+                        if (printWin && printWin.document) {\
+                            try {\
+                                printWin.document.open();\
+                                printWin.document.write(fullHtml);\
+                                printWin.document.close();\
+                                return;\
+                            } catch (e) {\
+                                console.warn('Writing to window.document failed, falling back to Blob URL:', e);\
+                                try { printWin.close(); } catch (_) {}\
+                            }\
+                        }\
+                        try {\
+                            var blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });\
+                            var blobUrl = URL.createObjectURL(blob);\
+                            var blobWin = window.open(blobUrl, '_blank');\
+                            if (blobWin) {\
+                                setTimeout(function() {\
+                                    try { URL.revokeObjectURL(blobUrl); } catch (_) {}\
+                                }, 60000);\
+                                return;\
+                            }\
+                        } catch (e) {\
+                            console.warn('Blob URL open failed:', e);\
+                        }\
+                        try {\
+                            var frame = document.createElement('iframe');\
+                            frame.style.position = 'fixed';\
+                            frame.style.right = '100%';\
+                            frame.style.bottom = '100%';\
+                            frame.style.width = '0';\
+                            frame.style.height = '0';\
+                            frame.style.border = '0';\
+                            document.body.appendChild(frame);\
+                            var frameDoc = frame.contentWindow.document;\
+                            frameDoc.open();\
+                            frameDoc.write(fullHtml);\
+                            frameDoc.close();\
+                            setTimeout(function() {\
+                                try {\
+                                    frame.contentWindow.focus();\
+                                    frame.contentWindow.print();\
+                                } finally {\
+                                    setTimeout(function() {\
+                                        try { document.body.removeChild(frame); } catch (_) {}\
+                                    }, 2000);\
+                                }\
+                            }, 300);\
+                        } catch (e) {\
+                            console.error('Hidden iframe print failed:', e);\
+                        }\
+                    };\
                     document.addEventListener('DOMContentLoaded', function() {\
                         if (window.renderMathInSyncNote) window.renderMathInSyncNote();\
                     });"
