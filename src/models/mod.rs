@@ -6,6 +6,6 @@ pub mod signup_invite;
 
 pub use admin_user::AdminUserInfo;
 pub use attachment::{AttachmentInfo, FileShareInfo, FileShareLink, UploadResult};
-pub use note::{Note, NoteShareInfo};
+pub use note::{Note, NoteShareInfo, ShareOutcome};
 pub use shared_page::{MemberRole, PageEdit, SharedPage, SharedPageMember};
 pub use signup_invite::SignupInvite;

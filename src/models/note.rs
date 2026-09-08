@@ -27,3 +27,12 @@ pub struct NoteShareInfo {
     pub user_id: i64,
     pub email: String,
 }
+
+/// Result of `share_note_with_user`: the recipient either already has a
+/// SyncNote account (granted direct access) or didn't (a public share link
+/// was emailed to them instead).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ShareOutcome {
+    SharedWithUser(NoteShareInfo),
+    LinkEmailed,
+}

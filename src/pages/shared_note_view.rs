@@ -6,38 +6,47 @@ use crate::components::markdown::MarkdownPreview;
 use crate::models::Note;
 use crate::server::note_share_fns::{check_share_link_protected, get_shared_note};
 
+/// Public page for viewing a shared note by token.
+///
+/// Uses a single SSR-compatible Resource that checks the password-protection
+/// status AND fetches the note content in one round-trip when the link is open.
+/// This avoids the old `spawn_local` pattern which was a client-only no-op
+/// during SSR and caused hydration mismatches (and potential 502s).
 #[component]
 pub fn SharedNoteViewPage() -> impl IntoView {
     let params = use_params_map();
     let token = move || params.read().get("token").unwrap_or_default();
 
-    // Whether the link needs a password (None = not yet checked)
-    let is_protected = Resource::new(token, |t| async move {
-        check_share_link_protected(t).await
+    // Ok(Some(note)) → open, note is ready
+    // Ok(None)       → password-protected, show gate
+    // Err(_)         → invalid token / removed note
+    let page_data: Resource<Result<Option<Note>, String>> = Resource::new(token, |t| async move {
+        if t.is_empty() {
+            return Err("Invalid share link.".to_string());
+        }
+        match check_share_link_protected(t.clone()).await {
+            Err(e)    => Err(e.to_string()),
+            Ok(true)  => Ok(None),
+            Ok(false) => get_shared_note(t, None).await
+                .map(Some)
+                .map_err(|e| e.to_string()),
+        }
     });
 
     view! {
         <div class="min-h-screen bg-slate-50 dark:bg-slate-950 py-10 px-4">
             <div class="max-w-3xl mx-auto">
                 <Suspense fallback=|| view! {
-                    <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p>
+                    <div class="text-center py-24">
+                        <div class="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-3"/>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p>
+                    </div>
                 }>
                     {move || Suspend::new(async move {
-                        match is_protected.await {
-                            Err(_) => view! {
-                                <div class="text-center py-24 space-y-3">
-                                    <p class="text-4xl">{"🔗"}</p>
-                                    <p class="text-lg font-semibold text-slate-700 dark:text-slate-300">
-                                        "This note is not available"
-                                    </p>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400">
-                                        "The share link may be invalid or the note has been removed."
-                                    </p>
-                                </div>
-                            }.into_any(),
-                            Ok(protected) => view! {
-                                <SharedNoteContent token=token() protected=protected/>
-                            }.into_any(),
+                        match page_data.await {
+                            Err(_)           => view! { <NoteUnavailable/> }.into_any(),
+                            Ok(Some(note))   => view! { <NoteDisplay note=note/> }.into_any(),
+                            Ok(None)         => view! { <PasswordGate token=token()/> }.into_any(),
                         }
                     })}
                 </Suspense>
@@ -46,87 +55,100 @@ pub fn SharedNoteViewPage() -> impl IntoView {
     }
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
 #[component]
-fn SharedNoteContent(token: String, protected: bool) -> impl IntoView {
+fn NoteUnavailable() -> impl IntoView {
+    view! {
+        <div class="text-center py-24 space-y-3">
+            <p class="text-5xl">"🔗"</p>
+            <p class="text-lg font-semibold text-slate-700 dark:text-slate-300">
+                "This note is not available"
+            </p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">
+                "The share link may be invalid or the note has been removed."
+            </p>
+        </div>
+    }
+}
+
+#[component]
+fn NoteDisplay(note: Note) -> impl IntoView {
+    let updated_at = note.updated_at.clone();
+    let title = note.title.clone();
+    let body = note.body.clone();
+    view! {
+        <div id="note-print-area">
+            <div class="print:hidden mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                            {title}
+                        </h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            "Last updated: " {updated_at}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        on:click=|_| {
+                            #[cfg(feature = "hydrate")]
+                            {
+                                use wasm_bindgen::prelude::*;
+                                #[wasm_bindgen]
+                                extern "C" {
+                                    #[wasm_bindgen(js_namespace = window)]
+                                    fn print();
+                                }
+                                print();
+                            }
+                        }
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        "Download PDF"
+                    </button>
+                </div>
+                <p class="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                    "Shared via SyncNote · Read-only"
+                </p>
+            </div>
+            <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-6 print:border-none print:shadow-none print:p-0">
+                <MarkdownPreview body=Signal::derive(move || body.clone())/>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn PasswordGate(token: String) -> impl IntoView {
     let note: RwSignal<Option<Note>> = RwSignal::new(None);
     let loading = RwSignal::new(false);
     let error = RwSignal::new(Option::<String>::None);
     let password_input = RwSignal::new(String::new());
     let tok = token.clone();
 
-    // If not password-protected, fetch immediately
-    if !protected {
-        let tok2 = tok.clone();
-        spawn_local(async move {
-            loading.set(true);
-            match get_shared_note(tok2, None).await {
-                Ok(n) => note.set(Some(n)),
-                Err(e) => error.set(Some(e.to_string())),
-            }
-            loading.set(false);
-        });
-    }
-
     view! {
         {move || {
             if loading.get() {
                 return view! {
-                    <p class="text-sm text-slate-500 dark:text-slate-400">"Loading…"</p>
-                }.into_any();
-            }
-
-            if let Some(n) = note.get() {
-                // ── Render the note ──────────────────────────────────────────
-                let updated_at = n.updated_at.clone();
-                return view! {
-                    <div id="note-print-area">
-                        <div class="print:hidden mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
-                            <div class="flex items-start justify-between gap-4 flex-wrap">
-                                <div>
-                                    <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                                        {n.title.clone()}
-                                    </h1>
-                                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                        "Last updated: " {updated_at}
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    on:click=|_| {
-                                        #[cfg(feature = "hydrate")]
-                                        {
-                                            use wasm_bindgen::prelude::*;
-                                            #[wasm_bindgen]
-                                            extern "C" {
-                                                #[wasm_bindgen(js_namespace = window)]
-                                                fn print();
-                                            }
-                                            print();
-                                        }
-                                    }
-                                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                                >
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                    </svg>
-                                    "Download PDF"
-                                </button>
-                            </div>
-                            <p class="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                                "Shared via SyncNote · Read-only"
-                            </p>
-                        </div>
-                        <div class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-6 print:border-none print:shadow-none print:p-0">
-                            <MarkdownPreview body=Signal::derive(move || n.body.clone())/>
-                        </div>
+                    <div class="text-center py-12">
+                        <div class="inline-block w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-2"/>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">"Unlocking…"</p>
                     </div>
                 }.into_any();
             }
 
-            // ── Password gate ────────────────────────────────────────────────
+            if let Some(n) = note.get() {
+                return view! { <NoteDisplay note=n/> }.into_any();
+            }
+
+            // Password gate UI
             view! {
-                <div class="max-w-sm mx-auto mt-20">
+                <div class="max-w-sm mx-auto mt-16">
                     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-8 space-y-5 text-center">
                         <div class="w-14 h-14 mx-auto rounded-full bg-brand-50 dark:bg-brand-950/40 flex items-center justify-center">
                             <svg class="w-7 h-7 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

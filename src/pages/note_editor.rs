@@ -11,8 +11,9 @@ use crate::models::{AttachmentInfo, Note};
 use crate::server::attachment_fns::list_library_attachments;
 use crate::server::note_fns::{get_note, DeleteNote, SaveNote, SendNoteViaEmail};
 use crate::server::note_share_fns::{
-    create_note_share_link, get_note_share_token, list_note_user_shares, revoke_note_share_link,
-    share_note_with_user, unshare_note_from_user,
+    check_share_link_protected, create_note_share_link, get_note_share_token,
+    list_note_user_shares, revoke_note_share_link, send_share_link_email, share_note_with_user,
+    unshare_note_from_user,
 };
 
 #[component]
@@ -78,6 +79,9 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let updated_at = note.updated_at.clone();
     let title = RwSignal::new(note.title);
     let body = RwSignal::new(note.body);
+    // Tracks the title as of the last sidebar refresh, so saves that only
+    // change the body don't trigger a sidebar refetch.
+    let last_saved_title = RwSignal::new(title.get_untracked());
     let save = ServerAction::<SaveNote>::new();
     let epoch = RwSignal::new(0u32);
     let saved = RwSignal::new(true);
@@ -107,10 +111,28 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let share_email_input = RwSignal::new(String::new());
     let share_email_error = RwSignal::new(Option::<String>::None);
     let share_email_pending = RwSignal::new(false);
+    let share_email_info = RwSignal::new(Option::<String>::None);
     let share_new_password = RwSignal::new(String::new()); // optional password when creating a link
+    // Plaintext of the link's password, known only for as long as this page has
+    // it in memory (set right after creating a protected link). The server only
+    // ever stores a hash, so once this is gone (page reload, different session)
+    // there is no way to recover it — the "email password" field falls back to
+    // asking the owner to re-type it.
+    let known_share_password: RwSignal<Option<String>> = RwSignal::new(None);
+    let share_is_protected = RwSignal::new(false);
+    // ── Email link signals ────────────────────────────────────────────────────
+    let email_link_input = RwSignal::new(String::new());
+    let email_link_password = RwSignal::new(String::new());
+    let email_link_pending = RwSignal::new(false);
+    let email_link_feedback = RwSignal::new(Option::<(bool, String)>::None);
 
-    // Load existing share token + shared users when share modal opens
+    // Toggles the share panel; loads the share token + shared users the first
+    // time it opens (clicking the share button again while it's open just closes it).
     let open_share_modal = move |_| {
+        if share_modal_open.get_untracked() {
+            share_modal_open.set(false);
+            return;
+        }
         share_error.set(None);
         share_modal_open.set(true);
         if share_token.get_untracked().is_none() && !share_loading.get_untracked() {
@@ -119,7 +141,14 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                 let token_res = get_note_share_token(id).await;
                 let users_res = list_note_user_shares(id).await;
                 match token_res {
-                    Ok(t) => share_token.set(t),
+                    Ok(t) => {
+                        if let Some(tok) = t.clone() {
+                            if let Ok(protected) = check_share_link_protected(tok).await {
+                                share_is_protected.set(protected);
+                            }
+                        }
+                        share_token.set(t);
+                    }
                     Err(e) => share_error.set(Some(e.to_string())),
                 }
                 if let Ok(u) = users_res {
@@ -133,13 +162,18 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     let create_share_link = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
         let pw = share_new_password.get_untracked();
-        let password = if pw.trim().is_empty() { None } else { Some(pw) };
+        let password = if pw.trim().is_empty() { None } else { Some(pw.clone()) };
         share_error.set(None);
         share_loading.set(true);
         spawn_local(async move {
             match create_note_share_link(id, password).await {
                 Ok(token) => {
                     share_token.set(Some(token));
+                    if !pw.trim().is_empty() {
+                        known_share_password.set(Some(pw));
+                        share_is_protected.set(true);
+                        email_link_password.set(known_share_password.get_untracked().unwrap_or_default());
+                    }
                     share_new_password.set(String::new());
                 }
                 Err(e) => share_error.set(Some(e.to_string())),
@@ -187,8 +221,12 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     Effect::new(move |_| {
         if let Some(res) = save.value().get() {
             if res.is_ok() {
-                if let Some(cb) = on_saved {
-                    cb.run(());
+                let current_title = title.get_untracked();
+                if last_saved_title.get_untracked() != current_title {
+                    last_saved_title.set(current_title);
+                    if let Some(cb) = on_saved {
+                        cb.run(());
+                    }
                 }
             }
         }
@@ -926,8 +964,83 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                                                 "Revoke link"
                                             </button>
                                         </div>
+
+                                        // ── Email this link ──────────────────────────────────────
+                                        <div class="border-t border-slate-200 dark:border-slate-700 pt-2.5 space-y-1.5">
+                                            <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                "Email this link"
+                                            </p>
+                                            <form
+                                                on:submit={
+                                                    let email_tok = token;
+                                                    move |ev: leptos::ev::SubmitEvent| {
+                                                        ev.prevent_default();
+                                                        let recip = email_link_input.get_untracked();
+                                                        if recip.trim().is_empty() { return; }
+                                                        email_link_feedback.set(None);
+                                                        email_link_pending.set(true);
+                                                        let origin = {
+                                                            #[cfg(feature = "hydrate")]
+                                                            { web_sys::window().and_then(|w| w.location().origin().ok()).unwrap_or_default() }
+                                                            #[cfg(not(feature = "hydrate"))]
+                                                            { String::new() }
+                                                        };
+                                                        let full_url = format!("{origin}/note/shared/{email_tok}");
+                                                        let pw = email_link_password.get_untracked();
+                                                        let password = if pw.trim().is_empty() { None } else { Some(pw) };
+                                                        spawn_local(async move {
+                                                            match send_share_link_email(id, recip, full_url, password).await {
+                                                                Ok(()) => {
+                                                                    email_link_feedback.set(Some((true, "Link sent!".into())));
+                                                                    email_link_input.set(String::new());
+                                                                }
+                                                                Err(e) => email_link_feedback.set(Some((false, e.to_string()))),
+                                                            }
+                                                            email_link_pending.set(false);
+                                                        });
+                                                    }
+                                                }
+                                                class="space-y-1.5"
+                                            >
+                                                <div class="flex items-center gap-2">
+                                                    <input
+                                                        type="email"
+                                                        required
+                                                        placeholder="recipient@example.com"
+                                                        prop:value=move || email_link_input.get()
+                                                        on:input=move |ev| email_link_input.set(event_target_value(&ev))
+                                                        class="flex-1 min-w-0 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-xs focus:border-brand-500 focus:outline-none"
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        disabled=move || email_link_pending.get()
+                                                        class="shrink-0 rounded-md border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 px-3 py-1.5 text-xs font-semibold hover:bg-brand-100 dark:hover:bg-brand-900/40 disabled:opacity-60 transition"
+                                                    >
+                                                        {move || if email_link_pending.get() { "Sending\u{2026}" } else { "Send" }}
+                                                    </button>
+                                                </div>
+                                                <Show when=move || share_is_protected.get()>
+                                                    <input
+                                                        type="password"
+                                                        placeholder="Link password (included in the email)"
+                                                        prop:value=move || email_link_password.get()
+                                                        on:input=move |ev| email_link_password.set(event_target_value(&ev))
+                                                        class="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-xs focus:border-brand-500 focus:outline-none"
+                                                    />
+                                                </Show>
+                                            </form>
+                                            {move || email_link_feedback.get().map(|(ok, msg)| {
+                                                let cls = if ok {
+                                                    "text-xs text-emerald-600 dark:text-emerald-400"
+                                                } else {
+                                                    "text-xs text-rose-500 dark:text-rose-400"
+                                                };
+                                                view! { <p class=cls>{msg}</p> }
+                                            })}
+                                        </div>
                                     </div>
                                 }.into_any()
+
                             } else {
                                 view! {
                                     <form on:submit=create_share_link class="space-y-2">
@@ -968,11 +1081,18 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                                 let email = share_email_input.get_untracked();
                                 if email.trim().is_empty() { return; }
                                 share_email_error.set(None);
+                                share_email_info.set(None);
                                 share_email_pending.set(true);
                                 spawn_local(async move {
                                     match share_note_with_user(id, email).await {
-                                        Ok(info) => {
+                                        Ok(crate::models::ShareOutcome::SharedWithUser(info)) => {
                                             share_users.update(|v| v.push(info));
+                                            share_email_input.set(String::new());
+                                        }
+                                        Ok(crate::models::ShareOutcome::LinkEmailed) => {
+                                            share_email_info.set(Some(
+                                                "No SyncNote account for that email — emailed them a read-only link instead.".to_string(),
+                                            ));
                                             share_email_input.set(String::new());
                                         }
                                         Err(e) => share_email_error.set(Some(e.to_string())),
@@ -1002,6 +1122,11 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         <Show when=move || share_email_error.get().is_some()>
                             <p class="text-xs text-rose-500">
                                 {move || share_email_error.get().unwrap_or_default()}
+                            </p>
+                        </Show>
+                        <Show when=move || share_email_info.get().is_some()>
+                            <p class="text-xs text-emerald-600 dark:text-emerald-400">
+                                {move || share_email_info.get().unwrap_or_default()}
                             </p>
                         </Show>
 

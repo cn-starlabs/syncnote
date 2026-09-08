@@ -44,6 +44,7 @@ pub fn DashboardPage() -> impl IntoView {
     let share_email_input = RwSignal::new(String::new());
     let share_email_error = RwSignal::new(Option::<String>::None);
     let share_email_pending = RwSignal::new(false);
+    let share_email_info = RwSignal::new(Option::<String>::None);
     let share_new_password = RwSignal::new(String::new());
 
     let open_share_modal = move |note_id: i64| {
@@ -53,6 +54,7 @@ pub fn DashboardPage() -> impl IntoView {
         share_error.set(None);
         share_email_input.set(String::new());
         share_email_error.set(None);
+        share_email_info.set(None);
         share_new_password.set(String::new());
         share_loading.set(true);
         spawn_local(async move {
@@ -139,11 +141,18 @@ pub fn DashboardPage() -> impl IntoView {
         let email = share_email_input.get_untracked();
         if email.trim().is_empty() { return; }
         share_email_error.set(None);
+        share_email_info.set(None);
         share_email_pending.set(true);
         spawn_local(async move {
             match share_note_with_user(note_id, email).await {
-                Ok(info) => {
+                Ok(crate::models::ShareOutcome::SharedWithUser(info)) => {
                     share_users.update(|v| v.push(info));
+                    share_email_input.set(String::new());
+                }
+                Ok(crate::models::ShareOutcome::LinkEmailed) => {
+                    share_email_info.set(Some(
+                        "No SyncNote account for that email — emailed them a read-only link instead.".to_string(),
+                    ));
                     share_email_input.set(String::new());
                 }
                 Err(e) => share_email_error.set(Some(e.to_string())),
@@ -330,6 +339,9 @@ pub fn DashboardPage() -> impl IntoView {
 
                             <Show when=move || share_email_error.get().is_some()>
                                 <p class="text-xs text-rose-500">{move || share_email_error.get().unwrap_or_default()}</p>
+                            </Show>
+                            <Show when=move || share_email_info.get().is_some()>
+                                <p class="text-xs text-emerald-600 dark:text-emerald-400">{move || share_email_info.get().unwrap_or_default()}</p>
                             </Show>
 
                             // List of already-shared users
