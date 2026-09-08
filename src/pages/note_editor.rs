@@ -266,10 +266,77 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
     };
 
     let view_mode = RwSignal::new("split"); // "split" | "edit" | "preview"
+    let textarea_ref: NodeRef<leptos::html::Textarea> = NodeRef::new();
+
+    // Converts a UTF-16 code-unit offset (what the DOM's selectionStart/End report,
+    // since JS strings are UTF-16) into a byte offset usable for indexing `s` (a
+    // Rust UTF-8 `&str`). Needed because notes can contain non-ASCII text.
+    #[cfg(feature = "hydrate")]
+    fn utf16_to_byte_offset(s: &str, utf16_offset: usize) -> usize {
+        let mut utf16_count = 0usize;
+        for (byte_idx, ch) in s.char_indices() {
+            if utf16_count >= utf16_offset {
+                return byte_idx;
+            }
+            utf16_count += ch.len_utf16();
+        }
+        s.len()
+    }
 
     let insert_snippet = {
         let schedule_save = schedule_save.clone();
         move |prefix: &'static str, suffix: &'static str, placeholder: &'static str| {
+            #[cfg(feature = "hydrate")]
+            {
+                if let Some(el) = textarea_ref.get_untracked() {
+                    let start_u16 = el.selection_start().ok().flatten().unwrap_or(0) as usize;
+                    let end_u16 = el.selection_end().ok().flatten().unwrap_or(0) as usize;
+                    let (start_u16, end_u16) = (start_u16.min(end_u16), start_u16.max(end_u16));
+
+                    let current = body.get_untracked();
+                    let start = utf16_to_byte_offset(&current, start_u16);
+                    let end = utf16_to_byte_offset(&current, end_u16);
+                    let selected = &current[start..end];
+
+                    let mut new_body = String::with_capacity(
+                        current.len() + prefix.len() + suffix.len() + placeholder.len(),
+                    );
+                    new_body.push_str(&current[..start]);
+                    new_body.push_str(prefix);
+                    let prefix_u16: usize = prefix.chars().map(char::len_utf16).sum();
+                    let (cursor_start_u16, cursor_end_u16);
+                    if selected.is_empty() {
+                        // No selection: insert the placeholder and select it, so
+                        // typing immediately replaces it (matches common editors).
+                        new_body.push_str(placeholder);
+                        let placeholder_u16: usize = placeholder.chars().map(char::len_utf16).sum();
+                        cursor_start_u16 = start_u16 + prefix_u16;
+                        cursor_end_u16 = cursor_start_u16 + placeholder_u16;
+                    } else {
+                        // Wrap the current selection instead of the placeholder.
+                        new_body.push_str(selected);
+                        let selected_u16: usize = selected.chars().map(char::len_utf16).sum();
+                        cursor_start_u16 = start_u16 + prefix_u16;
+                        cursor_end_u16 = cursor_start_u16 + selected_u16;
+                    }
+                    new_body.push_str(suffix);
+                    new_body.push_str(&current[end..]);
+
+                    body.set(new_body);
+                    schedule_save();
+
+                    let el = el.clone();
+                    set_timeout(
+                        move || {
+                            let _ = el.focus();
+                            let _ = el.set_selection_range(cursor_start_u16 as u32, cursor_end_u16 as u32);
+                        },
+                        Duration::from_millis(0),
+                    );
+                    return;
+                }
+            }
+            // Fallback if the textarea isn't mounted yet (or non-hydrate build): append at the end.
             body.update(|b| {
                 if b.ends_with('\n') || b.is_empty() {
                     b.push_str(&format!("{prefix}{placeholder}{suffix}"));
@@ -659,6 +726,17 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
                         class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                     >
                         "⊞ Table"
+                    </button>
+                    <button
+                        type="button"
+                        on:click={
+                            let insert = insert_snippet.clone();
+                            move |_| insert("<div align=\"center\">\n", "\n</div>", "centered text")
+                        }
+                        title="Center-align text"
+                        class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                        "⯀ Center"
                     </button>
                 </div>
 
@@ -1242,6 +1320,7 @@ fn NoteEditor(note: Note, #[prop(optional)] on_saved: Option<Callback<()>>) -> i
             }>
                 <Show when=move || view_mode.get() != "preview">
                     <textarea
+                        node_ref=textarea_ref
                         prop:value=move || body.get()
                         on:input=move |ev| {
                             body.set(event_target_value(&ev));

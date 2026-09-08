@@ -1,20 +1,23 @@
+use std::collections::HashSet;
+use std::sync::LazyLock;
+
+use ammonia::Builder;
 use leptos::prelude::*;
-use pulldown_cmark::{Event, Options, Parser};
+use pulldown_cmark::{Options, Parser};
 
 /// Renders Markdown to HTML with math formula support ($...$ inline, $$...$$ block).
-/// Raw HTML embedded in the source (`Event::Html` / `Event::InlineHtml`) is downgraded
-/// to plain text instead of passed through — shared pages render other users' Markdown
-/// via `inner_html`, so passing raw HTML through unfiltered would let any editor inject
-/// a `<script>` that runs in every other viewer's browser.
+/// Raw HTML the user types (`Event::Html` / `Event::InlineHtml`) is now passed through
+/// instead of escaped — but only after `sanitize_html` scrubs it. This output is
+/// injected via `inner_html` on shared pages viewed by *other* users, so passing raw
+/// HTML through unfiltered would let any editor inject a `<script>` that runs in every
+/// other viewer's browser; `sanitize_html` is what keeps that safe.
 pub fn render_markdown(src: &str) -> String {
     let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS;
-    let parser = Parser::new_ext(src, options).map(|event| match event {
-        Event::Html(html) => Event::Text(html),
-        Event::InlineHtml(html) => Event::Text(html),
-        other => other,
-    });
+    let parser = Parser::new_ext(src, options);
     let mut html_out = String::new();
     pulldown_cmark::html::push_html(&mut html_out, parser);
+
+    html_out = sanitize_html(&html_out);
 
     // Leptos Router intercepts clicks on <a> tags that don't have rel="external" or target="_blank".
     // For /attachments/ links, ensure they bypass client-side routing.
@@ -27,6 +30,50 @@ pub fn render_markdown(src: &str) -> String {
     html_out = render_math_formulas(&html_out);
 
     html_out
+}
+
+/// Scrubs Markdown-generated HTML down to an explicit allow-list before it's ever
+/// trusted as `inner_html`. Deliberately built from scratch rather than ammonia's
+/// defaults: those defaults don't include `<input>`, which pulldown-cmark's task-list
+/// feature emits natively (`<input type="checkbox">`) — an unmodified default builder
+/// would silently break existing checklists the moment sanitization was introduced.
+/// `align` (not `style`) is what backs center-aligned text: a fixed enum of values is
+/// far cheaper to reason about safely than arbitrary CSS.
+fn sanitize_html(html: &str) -> String {
+    static ALIGN_VALUES: LazyLock<HashSet<&'static str>> =
+        LazyLock::new(|| ["left", "center", "right", "justify"].into_iter().collect());
+
+    Builder::default()
+        .tags(
+            [
+                "div", "span", "p", "br", "hr", "b", "i", "u", "strong", "em", "mark", "small",
+                "sub", "sup", "blockquote", "code", "pre", "kbd", "ul", "ol", "li", "h1", "h2",
+                "h3", "h4", "h5", "h6", "a", "img", "table", "thead", "tbody", "tr", "td", "th",
+                "del", "input",
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .add_tag_attributes("input", ["type", "checked", "disabled"])
+        .add_tag_attributes("div", ["align"])
+        .add_tag_attributes("p", ["align"])
+        .add_tag_attributes("td", ["align"])
+        .add_tag_attributes("th", ["align"])
+        // "rel" is deliberately not added here: ammonia's default `link_rel` setting
+        // auto-injects rel="noopener noreferrer" on every <a> and panics at runtime
+        // if "rel" is also in the explicit allow-list (the two mechanisms conflict).
+        .add_tag_attributes("a", ["href", "title", "target"])
+        .add_tag_attributes("img", ["src", "alt", "width", "height"])
+        .url_schemes(["http", "https", "mailto"].into_iter().collect())
+        .attribute_filter(move |element, attribute, value| {
+            if attribute == "align" && !ALIGN_VALUES.contains(value) {
+                return None;
+            }
+            let _ = element;
+            Some(value.into())
+        })
+        .clean(html)
+        .to_string()
 }
 
 /// Transforms block `$$...$$` into `<div class="math-block">...</div>`
@@ -226,4 +273,73 @@ pub fn MarkdownPreview(#[prop(into)] body: Signal<String>) -> impl IntoView {
     });
 
     view! { <div class="prose-note" inner_html=move || render_markdown(&body.get())></div> }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_markdown;
+
+    #[test]
+    fn strips_script_tags() {
+        let out = render_markdown("hello <script>alert(1)</script> world");
+        assert!(!out.contains("<script"), "script tag survived: {out}");
+    }
+
+    #[test]
+    fn strips_event_handlers() {
+        let out = render_markdown(r#"<img src=x onerror="alert(1)">"#);
+        assert!(!out.contains("onerror"), "event handler survived: {out}");
+    }
+
+    #[test]
+    fn strips_javascript_url() {
+        let out = render_markdown(r#"<a href="javascript:alert(1)">click</a>"#);
+        assert!(!out.contains("javascript:"), "javascript: url survived: {out}");
+    }
+
+    #[test]
+    fn allows_center_align() {
+        let out = render_markdown("<div align=\"center\">centered text</div>");
+        assert!(out.contains(r#"align="center""#), "align attribute stripped: {out}");
+        assert!(out.contains("centered text"), "content stripped: {out}");
+    }
+
+    #[test]
+    fn rejects_bogus_align_value() {
+        let out = render_markdown(r#"<div align="javascript:alert(1)">x</div>"#);
+        assert!(!out.contains("javascript"), "bogus align value survived: {out}");
+    }
+
+    #[test]
+    fn task_list_checkbox_survives() {
+        let out = render_markdown("- [x] done\n- [ ] not done");
+        assert!(out.contains("type=\"checkbox\""), "checkbox stripped: {out}");
+    }
+
+    #[test]
+    fn table_survives() {
+        let out = render_markdown("| a | b |\n| --- | --- |\n| 1 | 2 |");
+        assert!(out.contains("<table>"), "table stripped: {out}");
+        assert!(out.contains("<td>1</td>"), "table cell stripped: {out}");
+    }
+
+    #[test]
+    fn code_block_and_math_survive() {
+        let out = render_markdown("```rust\nfn main() {}\n```\n\n$x^2$");
+        assert!(out.contains("fn main"), "code block content stripped: {out}");
+        assert!(out.contains("katex-math-inline"), "math span missing: {out}");
+    }
+
+    #[test]
+    fn link_gets_safe_rel() {
+        let out = render_markdown("[hi](https://example.com)");
+        assert!(out.contains("href=\"https://example.com\""), "link stripped: {out}");
+    }
+
+    #[test]
+    fn attachment_link_rewrite_still_applies() {
+        let out = render_markdown("[file](/attachments/foo.pdf)");
+        assert!(out.contains("target=\"_blank\""), "attachment rewrite missing: {out}");
+        assert!(out.contains("download"), "attachment rewrite missing: {out}");
+    }
 }
